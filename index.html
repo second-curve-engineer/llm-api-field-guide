@@ -699,7 +699,7 @@
 <tr class="diff-row"><td class="field">调工具枚举值</td><td class="note">"<strong style="color:#e8e8f0">tool_calls</strong>"</td><td class="note">"<strong style="color:#e8e8f0">tool_use</strong>"</td></tr>
 <tr class="diff-row"><td class="field">截断枚举值</td><td class="note">"<strong style="color:#e8e8f0">length</strong>"</td><td class="note">"<strong style="color:#e8e8f0">max_tokens</strong>"</td></tr>
 <tr class="diff-row"><td class="field">temperature 上限</td><td class="note">2.0</td><td class="note"><strong style="color:#e8e8f0">1.0</strong></td></tr>
-<tr class="diff-row"><td class="field">思考模式参数</td><td class="note">reasoning.effort (low/medium/high)，Responses API</td><td class="note">thinking.type (enabled/disabled/<strong style="color:#e8e8f0">adaptive</strong>)</td></tr>
+<tr class="diff-row"><td class="field">思考模式参数</td><td class="note">Chat Completions 用 <strong style="color:#e8e8f0">reasoning_effort</strong>；Responses API 用 reasoning.effort / reasoning.summary</td><td class="note">thinking.type (enabled/disabled/<strong style="color:#e8e8f0">adaptive</strong>)，返回 content block</td></tr>
 <tr class="diff-row"><td class="field">token 统计字段名</td><td class="note">prompt_tokens / completion_tokens</td><td class="note">input_tokens / output_tokens</td></tr>
 <tr class="diff-row"><td class="field">鉴权请求头</td><td class="note">Authorization: Bearer $OPENAI_API_KEY</td><td class="note">x-api-key: $ANTHROPIC_API_KEY + <strong style="color:#e8e8f0">anthropic-version（必填）</strong></td></tr>
 </tbody>
@@ -1143,6 +1143,12 @@
 <td class="note">指定模型。o 系列是 reasoning 模型，不支持 temperature 参数</td>
 </tr>
 <tr class="key-row">
+<td class="field">reasoning_effort <span class="tag tag-key">重点</span></td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">none</span><span class="chip">minimal</span><span class="chip">low</span><span class="chip">medium</span><span class="chip">high</span><span class="chip">xhigh</span></div></td>
+<td class="note">Chat Completions 的 reasoning 模型预算参数。它影响内部推理强度、延迟和成本，<strong style="color:#e8e8f0">不会让返回结构多出 thinking block</strong>；具体可选值取决于模型</td>
+</tr>
+<tr class="key-row">
 <td class="field">messages <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
 <td class="type">array</td>
 <td><div class="chips"><span class="chip">role: system</span><span class="chip">developer</span><span class="chip">user</span><span class="chip">assistant</span><span class="chip">tool</span></div></td>
@@ -1406,7 +1412,7 @@
 <td class="field">usage.completion_tokens_details</td>
 <td class="type">object</td>
 <td>—</td>
-<td class="note">含 reasoning_tokens（o 系列模型思考消耗的 token 数）</td>
+<td class="note">含 reasoning_tokens（reasoning 模型内部推理消耗的 token 数）。<strong style="color:#e8e8f0">原始 thinking 不会出现在 message.content 里</strong></td>
 </tr>
 <tr>
 <td class="field">system_fingerprint</td>
@@ -1474,7 +1480,7 @@
 <td class="field">content[].type <span class="tag tag-key">重点</span></td>
 <td class="type">string</td>
 <td><div class="chips"><span class="chip">text</span><span class="chip">tool_use</span><span class="chip">thinking</span><span class="chip">redacted_thinking</span></div></td>
-<td class="note">block 类型。tool_use 表示发起工具调用；thinking 是思考过程（开启 thinking 模式时出现）</td>
+<td class="note">block 类型。tool_use 表示发起工具调用；thinking / redacted_thinking 是 extended thinking 协议块，可能是摘要、空 thinking 或加密数据，<strong style="color:#e8e8f0">多轮工具调用时需原样保留</strong></td>
 </tr>
 <tr>
 <td class="field">content[tool_use].id</td>
@@ -1577,7 +1583,7 @@
 <td class="field">reasoning <span class="tag tag-key">重点</span></td>
 <td class="type">object</td>
 <td><div class="chips"><span class="chip">effort</span><span class="chip">summary</span></div></td>
-<td class="note">reasoning 模型相关配置。影响质量、延迟和成本；Agent 应按 workflow 设置预算，分类/路由类任务不应默认开启高 reasoning</td>
+<td class="note">Responses API 的 reasoning 模型配置，对应 Chat Completions 的 reasoning_effort 但字段形态不同。影响质量、延迟和成本；Agent 应按 workflow 设置预算，分类/路由类任务不应默认开启高 reasoning</td>
 </tr>
 <tr class="key-row">
 <td class="field">max_output_tokens <span class="tag tag-key">重点</span></td>
@@ -1625,7 +1631,7 @@
 <tbody>
 <tr><td class="field">id</td><td class="note">response id，例如 resp_xxx</td><td class="note">写入 Trace；如果使用 previous_response_id，下一轮会引用它</td></tr>
 <tr><td class="field">status</td><td class="note">completed / incomplete / failed 等状态</td><td class="note">不要只看有没有文本输出；incomplete 时要检查 incomplete_details</td></tr>
-<tr><td class="field">output[]</td><td class="note">模型输出 item 列表</td><td class="note">可能包含 message、function/tool call、reasoning 等多类 item；Adapter 需要分类提取</td></tr>
+<tr><td class="field">output[]</td><td class="note">模型输出 item 列表</td><td class="note">可能包含 message、function/tool call、reasoning 等多类 item；reasoning item 可能承载 summary 或 encrypted_content，Adapter 需要分类提取和续接保留</td></tr>
 <tr><td class="field">output_text</td><td class="note">SDK/响应对象中的文本聚合便捷字段</td><td class="note">适合最终文本读取；但 Agent Loop 判断工具调用时不能只读 output_text</td></tr>
 <tr><td class="field">usage.input_tokens / output_tokens</td><td class="note">输入和输出 token 统计</td><td class="note">字段名更接近 Anthropic；Adapter 可统一为 inputTokens / outputTokens</td></tr>
 <tr><td class="field">usage.output_tokens_details.reasoning_tokens</td><td class="note">reasoning token 消耗</td><td class="note">成本和延迟分析必须记录，不能只看可见输出 token</td></tr>

@@ -84,7 +84,7 @@
 | 调工具枚举值 | " tool_calls " | " tool_use " |
 | 截断枚举值 | " length " | " max_tokens " |
 | temperature 上限 | 2.0 | 1.0 |
-| 思考模式参数 | reasoning.effort (low/medium/high)，Responses API | thinking.type (enabled/disabled/ adaptive ) |
+| 思考模式参数 | Chat Completions 用 reasoning_effort；Responses API 用 reasoning.effort / reasoning.summary | thinking.type (enabled/disabled/ adaptive )，返回 content block |
 | token 统计字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens |
 | 鉴权请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key: $ANTHROPIC_API_KEY + anthropic-version（必填） |
 
@@ -340,6 +340,7 @@ return fallback("max_turns_exceeded")
 | 字段 | 类型 | 枚举值 / 取值范围 | 说明与 Agent 关注点 |
 | --- | --- | --- | --- |
 | model 必填 | string | gpt-4o gpt-4o-mini gpt-4.1 o3 o4-mini | 指定模型。o 系列是 reasoning 模型，不支持 temperature 参数 |
+| reasoning_effort 重点 | string | none minimal low medium high xhigh | Chat Completions 的 reasoning 模型预算参数。它影响内部推理强度、延迟和成本，不会让返回结构多出 thinking block；具体可选值取决于模型 |
 | messages 必填 重点 | array | role: system developer user assistant tool | Agent 核心。完整对话历史 + tool call + tool result 全部在这里。 role=tool 是工具结果专属 role ，必须带 tool_call_id |
 | tools 重点 | array | type: function | 工具定义列表，每个工具含 name / description / parameters （JSON Schema） |
 | tool_choice 重点 | string/obj | auto none required {type,function} | auto=模型自决；none=禁止工具；required=必须调某工具（模型自选）；对象形式指定具体工具名 |
@@ -394,7 +395,7 @@ return fallback("max_turns_exceeded")
 | choices[0].message.refusal | string/null | — | 安全拒绝时的说明文字 |
 | usage 重点 | object | — | 含 prompt_tokens / completion_tokens / total_tokens。判断上下文是否快满，计算成本 |
 | usage.prompt_tokens_details | object | — | 细分 cached_tokens（命中缓存的 token 数），做成本优化时关注 |
-| usage.completion_tokens_details | object | — | 含 reasoning_tokens（o 系列模型思考消耗的 token 数） |
+| usage.completion_tokens_details | object | — | 含 reasoning_tokens（reasoning 模型内部推理消耗的 token 数）。原始 thinking 不会出现在 message.content 里 |
 | system_fingerprint | string | — | 模型系统版本指纹，调试输出一致性问题时用 |
 | created | integer | Unix timestamp | 请求创建时间，写 Trace 时记录 |
 
@@ -410,7 +411,7 @@ return fallback("max_turns_exceeded")
 | role | string | assistant | 固定为 assistant |
 | stop_reason 重点 | string | end_turn tool_use max_tokens stop_sequence refusal pause_turn | 在顶层 （OpenAI 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景） |
 | content 重点 | array | — | 内容块数组。 可同时含文本和工具调用 （OpenAI 有 tool_calls 时 content=null，Anthropic 可并存） |
-| content[].type 重点 | string | text tool_use thinking redacted_thinking | block 类型。tool_use 表示发起工具调用；thinking 是思考过程（开启 thinking 模式时出现） |
+| content[].type 重点 | string | text tool_use thinking redacted_thinking | block 类型。tool_use 表示发起工具调用；thinking / redacted_thinking 是 extended thinking 协议块，可能是摘要、空 thinking 或加密数据，多轮工具调用时需原样保留 |
 | content[tool_use].id | string | toolu_xxx | 工具调用 ID。 回填 tool_result 时字段名为 tool_use_id（不是 tool_call_id） |
 | content[tool_use].input 重点 | object | — | 已是 JSON 对象 ，直接用（OpenAI 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse |
 | model | string | — | 实际使用的模型 |
@@ -433,7 +434,7 @@ return fallback("max_turns_exceeded")
 | tools 重点 | array | function file_search web_search computer_use | 工具列表。既支持自定义 function，也支持 OpenAI 内建工具。Agent Runtime 仍然要维护自己的 ToolRegistry、白名单和风险策略，不能只依赖 provider tools |
 | tool_choice 重点 | string/object | auto none required 指定工具 | 控制工具调用策略。建议在 Adapter 层统一为 allow / deny / require / forceTool，不要让业务层感知各 provider 原始格式 |
 | text.format | object | text json_schema json_object | 结构化输出配置。Responses API 中对应 Chat Completions 的 response_format；新模型优先使用 json_schema，而不是旧 JSON mode |
-| reasoning 重点 | object | effort summary | reasoning 模型相关配置。影响质量、延迟和成本；Agent 应按 workflow 设置预算，分类/路由类任务不应默认开启高 reasoning |
+| reasoning 重点 | object | effort summary | Responses API 的 reasoning 模型配置，对应 Chat Completions 的 reasoning_effort 但字段形态不同。影响质量、延迟和成本；Agent 应按 workflow 设置预算，分类/路由类任务不应默认开启高 reasoning |
 | max_output_tokens 重点 | integer | 输出上限 | 限制响应生成 token，上限包含可见输出和 reasoning token。对应 Chat Completions 的 max_completion_tokens 语义，但字段名不同 |
 | previous_response_id | string | resp_xxx | 用于服务端状态续接。适合简单会话；如果 Agent Runtime 要完整可复盘、可 replay，仍建议自己持久化 input/output/trace |
 | truncation | string | disabled auto | 上下文超长处理策略。disabled 默认更可控，超长时直接失败；auto 会从会话开头丢弃内容，生产 Agent 需要谨慎使用，避免丢关键证据 |
@@ -446,7 +447,7 @@ return fallback("max_turns_exceeded")
 | --- | --- | --- |
 | id | response id，例如 resp_xxx | 写入 Trace；如果使用 previous_response_id，下一轮会引用它 |
 | status | completed / incomplete / failed 等状态 | 不要只看有没有文本输出；incomplete 时要检查 incomplete_details |
-| output[] | 模型输出 item 列表 | 可能包含 message、function/tool call、reasoning 等多类 item；Adapter 需要分类提取 |
+| output[] | 模型输出 item 列表 | 可能包含 message、function/tool call、reasoning 等多类 item；reasoning item 可能承载 summary 或 encrypted_content，Adapter 需要分类提取和续接保留 |
 | output_text | SDK/响应对象中的文本聚合便捷字段 | 适合最终文本读取；但 Agent Loop 判断工具调用时不能只读 output_text |
 | usage.input_tokens / output_tokens | 输入和输出 token 统计 | 字段名更接近 Anthropic；Adapter 可统一为 inputTokens / outputTokens |
 | usage.output_tokens_details.reasoning_tokens | reasoning token 消耗 | 成本和延迟分析必须记录，不能只看可见输出 token |

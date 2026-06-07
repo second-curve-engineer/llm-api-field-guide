@@ -133,23 +133,46 @@
     top: 18px;
     right: 24px;
     z-index: 20;
-    width: auto;
-    min-width: 92px;
-    padding: 7px 12px;
-    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 999px;
     border: 1px solid var(--border2);
     background: var(--bg3);
     color: var(--text2);
     cursor: pointer;
-    font-family: var(--mono);
-    font-size: 11px;
-    text-align: center;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    box-shadow: 0 8px 24px var(--shadow);
+    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
   }
   .theme-toggle:hover {
     background: var(--bg4);
     color: var(--text);
     border-color: var(--purple);
+    transform: translateY(-1px);
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--purple);
+    outline-offset: 3px;
+  }
+  .theme-toggle svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+  }
+  .theme-toggle .icon-sun,
+  .theme-toggle .icon-moon {
+    display: none;
+  }
+  [data-theme="light"] .theme-toggle .icon-moon,
+  [data-theme="dark"] .theme-toggle .icon-sun {
+    display: block;
   }
 
   nav ul { list-style: none; padding: 0 0.75rem; }
@@ -489,7 +512,22 @@
 </style>
 </head>
 <body>
-<button aria-label="切换到夜间模式" class="theme-toggle" id="theme-toggle" type="button">夜间模式</button>
+<button aria-label="切换到夜间模式" class="theme-toggle" id="theme-toggle" title="切换到夜间模式" type="button">
+<svg aria-hidden="true" class="icon-moon" viewBox="0 0 24 24">
+<path d="M12 3a6.8 6.8 0 0 0 8.8 8.8A8.5 8.5 0 1 1 12 3Z"></path>
+</svg>
+<svg aria-hidden="true" class="icon-sun" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="4"></circle>
+<path d="M12 2v2"></path>
+<path d="M12 20v2"></path>
+<path d="m4.93 4.93 1.41 1.41"></path>
+<path d="m17.66 17.66 1.41 1.41"></path>
+<path d="M2 12h2"></path>
+<path d="M20 12h2"></path>
+<path d="m6.34 17.66-1.41 1.41"></path>
+<path d="m19.07 4.93-1.41 1.41"></path>
+</svg>
+</button>
 <div class="layout">
 <!-- ── Sidebar ── -->
 <nav>
@@ -2622,8 +2660,9 @@ const savedTheme = root.dataset.theme || 'light';
 function applyTheme(theme) {
   root.dataset.theme = theme;
   const isLight = theme === 'light';
-  themeToggle.textContent = isLight ? '夜间模式' : '日间模式';
-  themeToggle.setAttribute('aria-label', isLight ? '切换到夜间模式' : '切换到日间模式');
+  const label = isLight ? '切换到夜间模式' : '切换到日间模式';
+  themeToggle.setAttribute('aria-label', label);
+  themeToggle.setAttribute('title', label);
 }
 
 applyTheme(savedTheme);

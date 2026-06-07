@@ -8,9 +8,9 @@
 <link href="favicon.svg" rel="icon" type="image/svg+xml"/>
 <script>
   try {
-    document.documentElement.dataset.theme = localStorage.getItem('llm-api-field-guide-theme') || 'dark';
+    document.documentElement.dataset.theme = localStorage.getItem('llm-api-field-guide-theme') || 'light';
   } catch (_) {
-    document.documentElement.dataset.theme = 'dark';
+    document.documentElement.dataset.theme = 'light';
   }
 </script>
 <style>
@@ -129,9 +129,13 @@
     margin-top: 3px;
   }
   .theme-toggle {
-    width: 100%;
-    margin-top: 1rem;
-    padding: 6px 10px;
+    position: fixed;
+    top: 18px;
+    right: 24px;
+    z-index: 20;
+    width: auto;
+    min-width: 92px;
+    padding: 7px 12px;
     border-radius: 5px;
     border: 1px solid var(--border2);
     background: var(--bg3);
@@ -139,7 +143,7 @@
     cursor: pointer;
     font-family: var(--mono);
     font-size: 11px;
-    text-align: left;
+    text-align: center;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
   .theme-toggle:hover {
@@ -200,7 +204,9 @@
   }
   .page-header .desc {
     color: var(--text2);
-    font-size: 14px;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1.75;
     max-width: 1120px;
   }
   .badges { display: flex; gap: 8px; margin-top: 1rem; flex-wrap: wrap; }
@@ -477,13 +483,13 @@
 </style>
 </head>
 <body>
+<button aria-label="切换到夜间模式" class="theme-toggle" id="theme-toggle" type="button">夜间模式</button>
 <div class="layout">
 <!-- ── Sidebar ── -->
 <nav>
 <div class="logo">
 <div class="title">LLM API</div>
 <div class="sub">工程对照手册</div>
-<button aria-label="切换到日间模式" class="theme-toggle" id="theme-toggle" type="button">日间模式</button>
 </div>
 <ul>
 <li class="section-label">速览</li>
@@ -498,11 +504,12 @@
 <li><a href="#trace-cost-context">Trace 与成本</a></li>
 <li><a href="#gotchas">常见踩坑</a></li>
 <li class="section-label">API 参数</li>
-<li><a href="#openai-responses">Responses API 参数</a></li>
+
 <li><a href="#openai-req">Chat Completions 请求</a></li>
 <li><a href="#anthropic-req">Messages API 请求</a></li>
 <li><a href="#openai-resp">Chat Completions 返回</a></li>
 <li><a href="#anthropic-resp">Messages API 返回</a></li>
+<li><a href="#openai-responses">Responses API 参数</a></li>
 <li class="section-label">工具与结构化</li>
 <li><a href="#tool-schema">Tool Schema 用法</a></li>
 <li><a href="#structured-output">Structured Output</a></li>
@@ -547,99 +554,75 @@
 <!-- ══════════════════════════════════════ -->
 <!-- OPENAI 请求参数 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- ANTHROPIC 请求参数 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- OPENAI 返回参数 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- ANTHROPIC 返回参数 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- 枚举值汇总 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- 关键差异速查 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- OpenAI Responses API 选择 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Provider Adapter 设计 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Agent Loop 状态机 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- 错误处理与重试 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Trace 与成本 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- HTTP 示例：System Prompt -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- HTTP 示例：Tools Schema -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- HTTP 示例：工具结果回填 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- HTTP 示例：Response 解析 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Agent Loop 要点 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- 常见踩坑 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- SSE 协议格式 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- OpenAI SSE 解析 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Anthropic SSE 解析 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- 工具调用 Streaming -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Tool Schema 用法 -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- Structured Output -->
 <!-- ══════════════════════════════════════ -->
-
 <!-- ══════════════════════════════════════ -->
 <!-- 如何选择 -->
 <!-- ══════════════════════════════════════ -->
-
 <div class="section" id="diff">
 <div class="section-header">
 <h2>关键差异速查</h2>
@@ -675,7 +658,6 @@
 </table>
 </div>
 </div>
-
 <div class="section" id="enums">
 <div class="section-header">
 <h2>枚举值汇总</h2>
@@ -763,7 +745,6 @@
 <div class="dg-cell hl"><span class="chip">user</span>（content block type=tool_result）</div>
 </div>
 </div>
-
 <div class="section" id="responses-api">
 <div class="section-header">
 <h2>OpenAI Responses API 选择</h2>
@@ -792,7 +773,6 @@
 </table>
 </div>
 </div>
-
 <div class="section" id="provider-adapter">
 <div class="section-header">
 <h2>Provider Adapter 设计</h2>
@@ -855,7 +835,6 @@
 </table>
 </div>
 </div>
-
 <div class="section" id="loop-state-machine">
 <div class="section-header">
 <h2>Agent Loop 状态机</h2>
@@ -888,7 +867,6 @@
 <div class="dg-cell">持久化 PendingRun，等待 HITL 或外部事件后精准 resume</div>
 </div>
 </div>
-
 <div class="section" id="agent-loop">
 <div class="section-header">
 <h2>Agent Loop 核心要点</h2>
@@ -967,7 +945,6 @@
 <div class="dg-cell">保存状态，HITL 审批后恢复</div>
 </div>
 </div>
-
 <div class="section" id="error-retry">
 <div class="section-header">
 <h2>错误处理与重试策略</h2>
@@ -989,7 +966,6 @@
 </table>
 </div>
 </div>
-
 <div class="section" id="trace-cost-context">
 <div class="section-header">
 <h2>Trace、成本与上下文管理</h2>
@@ -1032,7 +1008,6 @@
 <div class="dg-cell">工具侧先聚合、截断、排序，只回填证据摘要</div>
 </div>
 </div>
-
 <div class="section" id="gotchas">
 <div class="section-header">
 <h2>常见踩坑</h2>
@@ -1091,6 +1066,403 @@
 <td class="field">usage 字段名</td>
 <td class="note">prompt_tokens / completion_tokens</td>
 <td class="note"><strong style="color:#e8e8f0">input_tokens / output_tokens</strong>（不同）</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div class="section" id="openai-req">
+<div class="section-header">
+<h2>OpenAI Chat Completions 请求参数</h2>
+<span class="endpoint">POST /v1/chat/completions</span>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th style="width:18%">字段</th>
+<th style="width:10%">类型</th>
+<th style="width:30%">枚举值 / 取值范围</th>
+<th>说明与 Agent 关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="field">model <span class="tag tag-req">必填</span></td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">gpt-4o</span><span class="chip">gpt-4o-mini</span><span class="chip">gpt-4.1</span><span class="chip">o3</span><span class="chip">o4-mini</span></div></td>
+<td class="note">指定模型。o 系列是 reasoning 模型，不支持 temperature 参数</td>
+</tr>
+<tr class="key-row">
+<td class="field">messages <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
+<td class="type">array</td>
+<td><div class="chips"><span class="chip">role: system</span><span class="chip">developer</span><span class="chip">user</span><span class="chip">assistant</span><span class="chip">tool</span></div></td>
+<td class="note">Agent 核心。完整对话历史 + tool call + tool result 全部在这里。<strong style="color:#e8e8f0">role=tool 是工具结果专属 role</strong>，必须带 tool_call_id</td>
+</tr>
+<tr class="key-row">
+<td class="field">tools <span class="tag tag-key">重点</span></td>
+<td class="type">array</td>
+<td><div class="chips"><span class="chip">type: function</span></div></td>
+<td class="note">工具定义列表，每个工具含 name / description / <strong style="color:#e8e8f0">parameters</strong>（JSON Schema）</td>
+</tr>
+<tr class="key-row">
+<td class="field">tool_choice <span class="tag tag-key">重点</span></td>
+<td class="type">string/obj</td>
+<td><div class="chips"><span class="chip">auto</span><span class="chip">none</span><span class="chip">required</span><span class="chip">{type,function}</span></div></td>
+<td class="note">auto=模型自决；none=禁止工具；required=必须调某工具（模型自选）；对象形式指定具体工具名</td>
+</tr>
+<tr>
+<td class="field">parallel_tool_calls</td>
+<td class="type">boolean</td>
+<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
+<td class="note">是否允许单次返回多个 tool call。Agent 并行工具场景需开启，默认 true</td>
+</tr>
+<tr class="key-row">
+<td class="field">response_format <span class="tag tag-key">重点</span></td>
+<td class="type">object</td>
+<td><div class="chips"><span class="chip">type: text</span><span class="chip">json_object</span><span class="chip">json_schema</span></div></td>
+<td class="note">结构化输出。json_schema 可指定精确 schema。<strong style="color:#e8e8f0">Anthropic 没有此参数</strong>，需用 tool_choice 强制工具输出代替</td>
+</tr>
+<tr>
+<td class="field">temperature</td>
+<td class="type">number</td>
+<td>0.0 ~ 2.0，默认 1.0</td>
+<td class="note">控制随机性。工具调用场景建议调低（0~0.3）；<strong style="color:#e8e8f0">o 系列不支持此参数</strong></td>
+</tr>
+<tr>
+<td class="field">top_p</td>
+<td class="type">number</td>
+<td>0.0 ~ 1.0，默认 1.0</td>
+<td class="note">nucleus sampling。不要和 temperature 同时调整，二选一</td>
+</tr>
+<tr class="key-row">
+<td class="field">max_tokens / max_completion_tokens <span class="tag tag-key">重点</span></td>
+<td class="type">integer</td>
+<td>模型上限各不同</td>
+<td class="note">控制最大输出 token。<strong style="color:#e8e8f0">reasoning 模型用 max_completion_tokens</strong>（含思考 token）。不设则模型可能输出很长</td>
+</tr>
+<tr>
+<td class="field">stream</td>
+<td class="type">boolean</td>
+<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
+<td class="note">是否流式输出。true 时返回 SSE，<strong style="color:#e8e8f0">tool call arguments 需拼接后再 JSON.parse</strong></td>
+</tr>
+<tr>
+<td class="field">stop</td>
+<td class="type">string/array</td>
+<td>自定义字符串，最多 4 个</td>
+<td class="note">遇到指定序列停止。finish_reason 会变为 "stop"</td>
+</tr>
+<tr>
+<td class="field">n</td>
+<td class="type">integer</td>
+<td>默认 1</td>
+<td class="note">生成多个候选。生产保持 1，多候选成本倍增且 Agent 逻辑复杂</td>
+</tr>
+<tr>
+<td class="field">store</td>
+<td class="type">boolean</td>
+<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
+<td class="note">是否存储请求/响应到 OpenAI 侧。涉及隐私合规时设 false</td>
+</tr>
+<tr>
+<td class="field">metadata</td>
+<td class="type">object</td>
+<td>自定义 KV</td>
+<td class="note">打业务标记，便于 Trace 和成本归因。建议带 run_id / user_id / workflow</td>
+</tr>
+<tr>
+<td class="field">logprobs / top_logprobs</td>
+<td class="type">bool/int</td>
+<td>top_logprobs: 0~20</td>
+<td class="note">返回 token 概率。Eval / 分类置信度场景使用，普通 Agent 不需要</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="anthropic-req">
+<div class="section-header">
+<h2>Anthropic Messages API 请求参数</h2>
+<span class="endpoint">POST /v1/messages</span>
+</div>
+<div class="callout callout-warn">
+<span class="callout-icon">⚠</span>
+<div class="callout-body">请求头必须带 <strong>anthropic-version: 2023-06-01</strong>，缺少直接报 400。鉴权用 <strong>x-api-key</strong>，不是 Authorization Bearer。</div>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th style="width:18%">字段</th>
+<th style="width:10%">类型</th>
+<th style="width:30%">枚举值 / 取值范围</th>
+<th>说明与 Agent 关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="field">model <span class="tag tag-req">必填</span></td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">claude-opus-4-5</span><span class="chip">claude-sonnet-4-5</span><span class="chip">claude-haiku-4-5</span></div></td>
+<td class="note">指定 Claude 模型版本</td>
+</tr>
+<tr class="key-row">
+<td class="field">max_tokens <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
+<td class="type">integer</td>
+<td>模型上限各不同</td>
+<td class="note"><strong style="color:#e8e8f0">Anthropic 特有——必填</strong>，OpenAI 是可选。开启 thinking 时需设大（16000+），thinking token 也计入此上限</td>
+</tr>
+<tr class="key-row">
+<td class="field">messages <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
+<td class="type">array</td>
+<td><div class="chips"><span class="chip">role: user</span><span class="chip">role: assistant</span></div></td>
+<td class="note"><strong style="color:#e8e8f0">只有两种 role</strong>。tool result 也用 user role 承载（content block type=tool_result）。写 role=system 会报错</td>
+</tr>
+<tr class="key-row">
+<td class="field">system <span class="tag tag-key">重点</span></td>
+<td class="type">string/array</td>
+<td>—</td>
+<td class="note"><strong style="color:#e8e8f0">顶层字段，不在 messages 里</strong>。可以是字符串，也可以是 content block 数组（支持 prompt caching）</td>
+</tr>
+<tr class="key-row">
+<td class="field">tools <span class="tag tag-key">重点</span></td>
+<td class="type">array</td>
+<td><div class="chips"><span class="chip">type: custom</span><span class="chip">computer_use</span><span class="chip">text_editor</span><span class="chip">bash</span></div></td>
+<td class="note">自定义工具含 name / description / <strong style="color:#e8e8f0">input_schema</strong>（注意不是 parameters，是 Anthropic 特有字段名）</td>
+</tr>
+<tr class="key-row">
+<td class="field">tool_choice <span class="tag tag-key">重点</span></td>
+<td class="type">object</td>
+<td><div class="chips"><span class="chip">{type:"auto"}</span><span class="chip">{type:"any"}</span><span class="chip">{type:"tool",name:"..."}</span><span class="chip">{type:"none"}</span></div></td>
+<td class="note"><strong style="color:#e8e8f0">格式是对象，不是字符串</strong>。any=必须调工具（模型自选）；tool=强制指定工具名。对应 OpenAI 的 required 和 function 对象</td>
+</tr>
+<tr>
+<td class="field">temperature</td>
+<td class="type">number</td>
+<td>0.0 ~ 1.0，默认 1.0</td>
+<td class="note"><strong style="color:#e8e8f0">上限是 1.0（OpenAI 是 2.0）</strong>。开启 thinking 时不建议修改</td>
+</tr>
+<tr>
+<td class="field">top_p</td>
+<td class="type">number</td>
+<td>0.0 ~ 1.0</td>
+<td class="note">同 OpenAI，不要和 temperature 同时调</td>
+</tr>
+<tr>
+<td class="field">top_k</td>
+<td class="type">integer</td>
+<td>正整数</td>
+<td class="note">OpenAI 没有此参数。限制候选 token 数量，一般不需要调</td>
+</tr>
+<tr>
+<td class="field">stream</td>
+<td class="type">boolean</td>
+<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
+<td class="note">事件类型更细（message_start / content_block_delta / message_stop），结构和 OpenAI 不同</td>
+</tr>
+<tr>
+<td class="field">stop_sequences</td>
+<td class="type">array</td>
+<td>字符串数组</td>
+<td class="note">对应 OpenAI 的 stop。命中后 stop_reason="stop_sequence"</td>
+</tr>
+<tr class="key-row">
+<td class="field">thinking <span class="tag tag-key">重点</span></td>
+<td class="type">object</td>
+<td><div class="chips"><span class="chip">type: enabled</span><span class="chip">disabled</span><span class="chip">adaptive</span></div></td>
+<td class="note">开启思考模式。enabled 需指定 budget_tokens；adaptive 让模型自决思考深度（新模型推荐）</td>
+</tr>
+<tr>
+<td class="field">metadata</td>
+<td class="type">object</td>
+<td>含 user_id</td>
+<td class="note">打用户标记，用于安全和滥用检测</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="openai-resp">
+<div class="section-header">
+<h2>OpenAI Chat Completions 返回参数</h2>
+<span class="label">Chat Completions Response</span>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th style="width:28%">字段路径</th>
+<th style="width:10%">类型</th>
+<th style="width:25%">枚举值</th>
+<th>说明与 Agent 关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="field">id</td>
+<td class="type">string</td>
+<td>chatcmpl-xxx</td>
+<td class="note">请求唯一 ID，写入 Trace 用</td>
+</tr>
+<tr>
+<td class="field">model</td>
+<td class="type">string</td>
+<td>—</td>
+<td class="note">实际使用的模型（可能和请求别名不同）</td>
+</tr>
+<tr class="key-row">
+<td class="field">choices[0].finish_reason <span class="tag tag-key">重点</span></td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">stop</span><span class="chip">tool_calls</span><span class="chip">length</span><span class="chip">content_filter</span></div></td>
+<td class="note"><strong style="color:#e8e8f0">Agent Loop 最核心判断字段</strong>。tool_calls=需执行工具；length=被截断；content_filter=安全拒绝</td>
+</tr>
+<tr>
+<td class="field">choices[0].message.role</td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">assistant</span></div></td>
+<td class="note">固定为 assistant</td>
+</tr>
+<tr>
+<td class="field">choices[0].message.content</td>
+<td class="type">string/null</td>
+<td>—</td>
+<td class="note">文本内容。<strong style="color:#e8e8f0">有 tool_calls 时此字段为 null</strong></td>
+</tr>
+<tr class="key-row">
+<td class="field">choices[0].message.tool_calls <span class="tag tag-key">重点</span></td>
+<td class="type">array/null</td>
+<td>—</td>
+<td class="note">工具调用列表。每个含 id / type / function.name / <strong style="color:#e8e8f0">function.arguments（字符串，需 JSON.parse）</strong></td>
+</tr>
+<tr>
+<td class="field">choices[0].message.refusal</td>
+<td class="type">string/null</td>
+<td>—</td>
+<td class="note">安全拒绝时的说明文字</td>
+</tr>
+<tr class="key-row">
+<td class="field">usage <span class="tag tag-key">重点</span></td>
+<td class="type">object</td>
+<td>—</td>
+<td class="note">含 prompt_tokens / completion_tokens / total_tokens。判断上下文是否快满，计算成本</td>
+</tr>
+<tr>
+<td class="field">usage.prompt_tokens_details</td>
+<td class="type">object</td>
+<td>—</td>
+<td class="note">细分 cached_tokens（命中缓存的 token 数），做成本优化时关注</td>
+</tr>
+<tr>
+<td class="field">usage.completion_tokens_details</td>
+<td class="type">object</td>
+<td>—</td>
+<td class="note">含 reasoning_tokens（o 系列模型思考消耗的 token 数）</td>
+</tr>
+<tr>
+<td class="field">system_fingerprint</td>
+<td class="type">string</td>
+<td>—</td>
+<td class="note">模型系统版本指纹，调试输出一致性问题时用</td>
+</tr>
+<tr>
+<td class="field">created</td>
+<td class="type">integer</td>
+<td>Unix timestamp</td>
+<td class="note">请求创建时间，写 Trace 时记录</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="anthropic-resp">
+<div class="section-header">
+<h2>Anthropic Messages API 返回参数</h2>
+<span class="label">Messages Response</span>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th style="width:28%">字段路径</th>
+<th style="width:10%">类型</th>
+<th style="width:25%">枚举值</th>
+<th>说明与 Agent 关注点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="field">id</td>
+<td class="type">string</td>
+<td>msg_xxx</td>
+<td class="note">请求唯一 ID，写 Trace 用</td>
+</tr>
+<tr>
+<td class="field">type</td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">message</span></div></td>
+<td class="note">固定为 message</td>
+</tr>
+<tr>
+<td class="field">role</td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">assistant</span></div></td>
+<td class="note">固定为 assistant</td>
+</tr>
+<tr class="key-row">
+<td class="field">stop_reason <span class="tag tag-key">重点</span></td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">end_turn</span><span class="chip">tool_use</span><span class="chip">max_tokens</span><span class="chip">stop_sequence</span><span class="chip">refusal</span><span class="chip">pause_turn</span></div></td>
+<td class="note"><strong style="color:#e8e8f0">在顶层</strong>（OpenAI 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景）</td>
+</tr>
+<tr class="key-row">
+<td class="field">content <span class="tag tag-key">重点</span></td>
+<td class="type">array</td>
+<td>—</td>
+<td class="note">内容块数组。<strong style="color:#e8e8f0">可同时含文本和工具调用</strong>（OpenAI 有 tool_calls 时 content=null，Anthropic 可并存）</td>
+</tr>
+<tr class="key-row">
+<td class="field">content[].type <span class="tag tag-key">重点</span></td>
+<td class="type">string</td>
+<td><div class="chips"><span class="chip">text</span><span class="chip">tool_use</span><span class="chip">thinking</span><span class="chip">redacted_thinking</span></div></td>
+<td class="note">block 类型。tool_use 表示发起工具调用；thinking 是思考过程（开启 thinking 模式时出现）</td>
+</tr>
+<tr>
+<td class="field">content[tool_use].id</td>
+<td class="type">string</td>
+<td>toolu_xxx</td>
+<td class="note">工具调用 ID。<strong style="color:#e8e8f0">回填 tool_result 时字段名为 tool_use_id（不是 tool_call_id）</strong></td>
+</tr>
+<tr class="key-row">
+<td class="field">content[tool_use].input <span class="tag tag-key">重点</span></td>
+<td class="type">object</td>
+<td>—</td>
+<td class="note"><strong style="color:#e8e8f0">已是 JSON 对象</strong>，直接用（OpenAI 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse</td>
+</tr>
+<tr>
+<td class="field">model</td>
+<td class="type">string</td>
+<td>—</td>
+<td class="note">实际使用的模型</td>
+</tr>
+<tr>
+<td class="field">stop_sequence</td>
+<td class="type">string/null</td>
+<td>—</td>
+<td class="note">命中的停止序列，stop_reason=stop_sequence 时不为 null</td>
+</tr>
+<tr class="key-row">
+<td class="field">usage <span class="tag tag-key">重点</span></td>
+<td class="type">object</td>
+<td>—</td>
+<td class="note">含 input_tokens / output_tokens（字段名与 OpenAI 不同）</td>
+</tr>
+<tr>
+<td class="field">usage.cache_read_input_tokens</td>
+<td class="type">integer</td>
+<td>—</td>
+<td class="note">命中 prompt cache 的 token 数。做 system prompt 缓存优化时关注</td>
 </tr>
 </tbody>
 </table>
@@ -1215,405 +1587,6 @@
 </div>
 </div>
 
-<div class="section" id="openai-req">
-<div class="section-header">
-<h2>OpenAI Chat Completions 请求参数</h2>
-<span class="endpoint">POST /v1/chat/completions</span>
-</div>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th style="width:18%">字段</th>
-<th style="width:10%">类型</th>
-<th style="width:30%">枚举值 / 取值范围</th>
-<th>说明与 Agent 关注点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="field">model <span class="tag tag-req">必填</span></td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">gpt-4o</span><span class="chip">gpt-4o-mini</span><span class="chip">gpt-4.1</span><span class="chip">o3</span><span class="chip">o4-mini</span></div></td>
-<td class="note">指定模型。o 系列是 reasoning 模型，不支持 temperature 参数</td>
-</tr>
-<tr class="key-row">
-<td class="field">messages <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
-<td class="type">array</td>
-<td><div class="chips"><span class="chip">role: system</span><span class="chip">developer</span><span class="chip">user</span><span class="chip">assistant</span><span class="chip">tool</span></div></td>
-<td class="note">Agent 核心。完整对话历史 + tool call + tool result 全部在这里。<strong style="color:#e8e8f0">role=tool 是工具结果专属 role</strong>，必须带 tool_call_id</td>
-</tr>
-<tr class="key-row">
-<td class="field">tools <span class="tag tag-key">重点</span></td>
-<td class="type">array</td>
-<td><div class="chips"><span class="chip">type: function</span></div></td>
-<td class="note">工具定义列表，每个工具含 name / description / <strong style="color:#e8e8f0">parameters</strong>（JSON Schema）</td>
-</tr>
-<tr class="key-row">
-<td class="field">tool_choice <span class="tag tag-key">重点</span></td>
-<td class="type">string/obj</td>
-<td><div class="chips"><span class="chip">auto</span><span class="chip">none</span><span class="chip">required</span><span class="chip">{type,function}</span></div></td>
-<td class="note">auto=模型自决；none=禁止工具；required=必须调某工具（模型自选）；对象形式指定具体工具名</td>
-</tr>
-<tr>
-<td class="field">parallel_tool_calls</td>
-<td class="type">boolean</td>
-<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
-<td class="note">是否允许单次返回多个 tool call。Agent 并行工具场景需开启，默认 true</td>
-</tr>
-<tr class="key-row">
-<td class="field">response_format <span class="tag tag-key">重点</span></td>
-<td class="type">object</td>
-<td><div class="chips"><span class="chip">type: text</span><span class="chip">json_object</span><span class="chip">json_schema</span></div></td>
-<td class="note">结构化输出。json_schema 可指定精确 schema。<strong style="color:#e8e8f0">Anthropic 没有此参数</strong>，需用 tool_choice 强制工具输出代替</td>
-</tr>
-<tr>
-<td class="field">temperature</td>
-<td class="type">number</td>
-<td>0.0 ~ 2.0，默认 1.0</td>
-<td class="note">控制随机性。工具调用场景建议调低（0~0.3）；<strong style="color:#e8e8f0">o 系列不支持此参数</strong></td>
-</tr>
-<tr>
-<td class="field">top_p</td>
-<td class="type">number</td>
-<td>0.0 ~ 1.0，默认 1.0</td>
-<td class="note">nucleus sampling。不要和 temperature 同时调整，二选一</td>
-</tr>
-<tr class="key-row">
-<td class="field">max_tokens / max_completion_tokens <span class="tag tag-key">重点</span></td>
-<td class="type">integer</td>
-<td>模型上限各不同</td>
-<td class="note">控制最大输出 token。<strong style="color:#e8e8f0">reasoning 模型用 max_completion_tokens</strong>（含思考 token）。不设则模型可能输出很长</td>
-</tr>
-<tr>
-<td class="field">stream</td>
-<td class="type">boolean</td>
-<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
-<td class="note">是否流式输出。true 时返回 SSE，<strong style="color:#e8e8f0">tool call arguments 需拼接后再 JSON.parse</strong></td>
-</tr>
-<tr>
-<td class="field">stop</td>
-<td class="type">string/array</td>
-<td>自定义字符串，最多 4 个</td>
-<td class="note">遇到指定序列停止。finish_reason 会变为 "stop"</td>
-</tr>
-<tr>
-<td class="field">n</td>
-<td class="type">integer</td>
-<td>默认 1</td>
-<td class="note">生成多个候选。生产保持 1，多候选成本倍增且 Agent 逻辑复杂</td>
-</tr>
-<tr>
-<td class="field">store</td>
-<td class="type">boolean</td>
-<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
-<td class="note">是否存储请求/响应到 OpenAI 侧。涉及隐私合规时设 false</td>
-</tr>
-<tr>
-<td class="field">metadata</td>
-<td class="type">object</td>
-<td>自定义 KV</td>
-<td class="note">打业务标记，便于 Trace 和成本归因。建议带 run_id / user_id / workflow</td>
-</tr>
-<tr>
-<td class="field">logprobs / top_logprobs</td>
-<td class="type">bool/int</td>
-<td>top_logprobs: 0~20</td>
-<td class="note">返回 token 概率。Eval / 分类置信度场景使用，普通 Agent 不需要</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-
-<div class="section" id="anthropic-req">
-<div class="section-header">
-<h2>Anthropic Messages API 请求参数</h2>
-<span class="endpoint">POST /v1/messages</span>
-</div>
-<div class="callout callout-warn">
-<span class="callout-icon">⚠</span>
-<div class="callout-body">请求头必须带 <strong>anthropic-version: 2023-06-01</strong>，缺少直接报 400。鉴权用 <strong>x-api-key</strong>，不是 Authorization Bearer。</div>
-</div>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th style="width:18%">字段</th>
-<th style="width:10%">类型</th>
-<th style="width:30%">枚举值 / 取值范围</th>
-<th>说明与 Agent 关注点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="field">model <span class="tag tag-req">必填</span></td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">claude-opus-4-5</span><span class="chip">claude-sonnet-4-5</span><span class="chip">claude-haiku-4-5</span></div></td>
-<td class="note">指定 Claude 模型版本</td>
-</tr>
-<tr class="key-row">
-<td class="field">max_tokens <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
-<td class="type">integer</td>
-<td>模型上限各不同</td>
-<td class="note"><strong style="color:#e8e8f0">Anthropic 特有——必填</strong>，OpenAI 是可选。开启 thinking 时需设大（16000+），thinking token 也计入此上限</td>
-</tr>
-<tr class="key-row">
-<td class="field">messages <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
-<td class="type">array</td>
-<td><div class="chips"><span class="chip">role: user</span><span class="chip">role: assistant</span></div></td>
-<td class="note"><strong style="color:#e8e8f0">只有两种 role</strong>。tool result 也用 user role 承载（content block type=tool_result）。写 role=system 会报错</td>
-</tr>
-<tr class="key-row">
-<td class="field">system <span class="tag tag-key">重点</span></td>
-<td class="type">string/array</td>
-<td>—</td>
-<td class="note"><strong style="color:#e8e8f0">顶层字段，不在 messages 里</strong>。可以是字符串，也可以是 content block 数组（支持 prompt caching）</td>
-</tr>
-<tr class="key-row">
-<td class="field">tools <span class="tag tag-key">重点</span></td>
-<td class="type">array</td>
-<td><div class="chips"><span class="chip">type: custom</span><span class="chip">computer_use</span><span class="chip">text_editor</span><span class="chip">bash</span></div></td>
-<td class="note">自定义工具含 name / description / <strong style="color:#e8e8f0">input_schema</strong>（注意不是 parameters，是 Anthropic 特有字段名）</td>
-</tr>
-<tr class="key-row">
-<td class="field">tool_choice <span class="tag tag-key">重点</span></td>
-<td class="type">object</td>
-<td><div class="chips"><span class="chip">{type:"auto"}</span><span class="chip">{type:"any"}</span><span class="chip">{type:"tool",name:"..."}</span><span class="chip">{type:"none"}</span></div></td>
-<td class="note"><strong style="color:#e8e8f0">格式是对象，不是字符串</strong>。any=必须调工具（模型自选）；tool=强制指定工具名。对应 OpenAI 的 required 和 function 对象</td>
-</tr>
-<tr>
-<td class="field">temperature</td>
-<td class="type">number</td>
-<td>0.0 ~ 1.0，默认 1.0</td>
-<td class="note"><strong style="color:#e8e8f0">上限是 1.0（OpenAI 是 2.0）</strong>。开启 thinking 时不建议修改</td>
-</tr>
-<tr>
-<td class="field">top_p</td>
-<td class="type">number</td>
-<td>0.0 ~ 1.0</td>
-<td class="note">同 OpenAI，不要和 temperature 同时调</td>
-</tr>
-<tr>
-<td class="field">top_k</td>
-<td class="type">integer</td>
-<td>正整数</td>
-<td class="note">OpenAI 没有此参数。限制候选 token 数量，一般不需要调</td>
-</tr>
-<tr>
-<td class="field">stream</td>
-<td class="type">boolean</td>
-<td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
-<td class="note">事件类型更细（message_start / content_block_delta / message_stop），结构和 OpenAI 不同</td>
-</tr>
-<tr>
-<td class="field">stop_sequences</td>
-<td class="type">array</td>
-<td>字符串数组</td>
-<td class="note">对应 OpenAI 的 stop。命中后 stop_reason="stop_sequence"</td>
-</tr>
-<tr class="key-row">
-<td class="field">thinking <span class="tag tag-key">重点</span></td>
-<td class="type">object</td>
-<td><div class="chips"><span class="chip">type: enabled</span><span class="chip">disabled</span><span class="chip">adaptive</span></div></td>
-<td class="note">开启思考模式。enabled 需指定 budget_tokens；adaptive 让模型自决思考深度（新模型推荐）</td>
-</tr>
-<tr>
-<td class="field">metadata</td>
-<td class="type">object</td>
-<td>含 user_id</td>
-<td class="note">打用户标记，用于安全和滥用检测</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-
-<div class="section" id="openai-resp">
-<div class="section-header">
-<h2>OpenAI Chat Completions 返回参数</h2>
-<span class="label">Chat Completions Response</span>
-</div>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th style="width:28%">字段路径</th>
-<th style="width:10%">类型</th>
-<th style="width:25%">枚举值</th>
-<th>说明与 Agent 关注点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="field">id</td>
-<td class="type">string</td>
-<td>chatcmpl-xxx</td>
-<td class="note">请求唯一 ID，写入 Trace 用</td>
-</tr>
-<tr>
-<td class="field">model</td>
-<td class="type">string</td>
-<td>—</td>
-<td class="note">实际使用的模型（可能和请求别名不同）</td>
-</tr>
-<tr class="key-row">
-<td class="field">choices[0].finish_reason <span class="tag tag-key">重点</span></td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">stop</span><span class="chip">tool_calls</span><span class="chip">length</span><span class="chip">content_filter</span></div></td>
-<td class="note"><strong style="color:#e8e8f0">Agent Loop 最核心判断字段</strong>。tool_calls=需执行工具；length=被截断；content_filter=安全拒绝</td>
-</tr>
-<tr>
-<td class="field">choices[0].message.role</td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">assistant</span></div></td>
-<td class="note">固定为 assistant</td>
-</tr>
-<tr>
-<td class="field">choices[0].message.content</td>
-<td class="type">string/null</td>
-<td>—</td>
-<td class="note">文本内容。<strong style="color:#e8e8f0">有 tool_calls 时此字段为 null</strong></td>
-</tr>
-<tr class="key-row">
-<td class="field">choices[0].message.tool_calls <span class="tag tag-key">重点</span></td>
-<td class="type">array/null</td>
-<td>—</td>
-<td class="note">工具调用列表。每个含 id / type / function.name / <strong style="color:#e8e8f0">function.arguments（字符串，需 JSON.parse）</strong></td>
-</tr>
-<tr>
-<td class="field">choices[0].message.refusal</td>
-<td class="type">string/null</td>
-<td>—</td>
-<td class="note">安全拒绝时的说明文字</td>
-</tr>
-<tr class="key-row">
-<td class="field">usage <span class="tag tag-key">重点</span></td>
-<td class="type">object</td>
-<td>—</td>
-<td class="note">含 prompt_tokens / completion_tokens / total_tokens。判断上下文是否快满，计算成本</td>
-</tr>
-<tr>
-<td class="field">usage.prompt_tokens_details</td>
-<td class="type">object</td>
-<td>—</td>
-<td class="note">细分 cached_tokens（命中缓存的 token 数），做成本优化时关注</td>
-</tr>
-<tr>
-<td class="field">usage.completion_tokens_details</td>
-<td class="type">object</td>
-<td>—</td>
-<td class="note">含 reasoning_tokens（o 系列模型思考消耗的 token 数）</td>
-</tr>
-<tr>
-<td class="field">system_fingerprint</td>
-<td class="type">string</td>
-<td>—</td>
-<td class="note">模型系统版本指纹，调试输出一致性问题时用</td>
-</tr>
-<tr>
-<td class="field">created</td>
-<td class="type">integer</td>
-<td>Unix timestamp</td>
-<td class="note">请求创建时间，写 Trace 时记录</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-
-<div class="section" id="anthropic-resp">
-<div class="section-header">
-<h2>Anthropic Messages API 返回参数</h2>
-<span class="label">Messages Response</span>
-</div>
-<div class="table-wrap">
-<table>
-<thead>
-<tr>
-<th style="width:28%">字段路径</th>
-<th style="width:10%">类型</th>
-<th style="width:25%">枚举值</th>
-<th>说明与 Agent 关注点</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td class="field">id</td>
-<td class="type">string</td>
-<td>msg_xxx</td>
-<td class="note">请求唯一 ID，写 Trace 用</td>
-</tr>
-<tr>
-<td class="field">type</td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">message</span></div></td>
-<td class="note">固定为 message</td>
-</tr>
-<tr>
-<td class="field">role</td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">assistant</span></div></td>
-<td class="note">固定为 assistant</td>
-</tr>
-<tr class="key-row">
-<td class="field">stop_reason <span class="tag tag-key">重点</span></td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">end_turn</span><span class="chip">tool_use</span><span class="chip">max_tokens</span><span class="chip">stop_sequence</span><span class="chip">refusal</span><span class="chip">pause_turn</span></div></td>
-<td class="note"><strong style="color:#e8e8f0">在顶层</strong>（OpenAI 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景）</td>
-</tr>
-<tr class="key-row">
-<td class="field">content <span class="tag tag-key">重点</span></td>
-<td class="type">array</td>
-<td>—</td>
-<td class="note">内容块数组。<strong style="color:#e8e8f0">可同时含文本和工具调用</strong>（OpenAI 有 tool_calls 时 content=null，Anthropic 可并存）</td>
-</tr>
-<tr class="key-row">
-<td class="field">content[].type <span class="tag tag-key">重点</span></td>
-<td class="type">string</td>
-<td><div class="chips"><span class="chip">text</span><span class="chip">tool_use</span><span class="chip">thinking</span><span class="chip">redacted_thinking</span></div></td>
-<td class="note">block 类型。tool_use 表示发起工具调用；thinking 是思考过程（开启 thinking 模式时出现）</td>
-</tr>
-<tr>
-<td class="field">content[tool_use].id</td>
-<td class="type">string</td>
-<td>toolu_xxx</td>
-<td class="note">工具调用 ID。<strong style="color:#e8e8f0">回填 tool_result 时字段名为 tool_use_id（不是 tool_call_id）</strong></td>
-</tr>
-<tr class="key-row">
-<td class="field">content[tool_use].input <span class="tag tag-key">重点</span></td>
-<td class="type">object</td>
-<td>—</td>
-<td class="note"><strong style="color:#e8e8f0">已是 JSON 对象</strong>，直接用（OpenAI 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse</td>
-</tr>
-<tr>
-<td class="field">model</td>
-<td class="type">string</td>
-<td>—</td>
-<td class="note">实际使用的模型</td>
-</tr>
-<tr>
-<td class="field">stop_sequence</td>
-<td class="type">string/null</td>
-<td>—</td>
-<td class="note">命中的停止序列，stop_reason=stop_sequence 时不为 null</td>
-</tr>
-<tr class="key-row">
-<td class="field">usage <span class="tag tag-key">重点</span></td>
-<td class="type">object</td>
-<td>—</td>
-<td class="note">含 input_tokens / output_tokens（字段名与 OpenAI 不同）</td>
-</tr>
-<tr>
-<td class="field">usage.cache_read_input_tokens</td>
-<td class="type">integer</td>
-<td>—</td>
-<td class="note">命中 prompt cache 的 token 数。做 system prompt 缓存优化时关注</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
 
 <div class="section" id="tool-schema">
 <div class="section-header">
@@ -1781,7 +1754,6 @@
 </div>
 </div>
 </div>
-
 <div class="section" id="structured-output">
 <div class="section-header">
 <h2>Structured Output</h2>
@@ -1926,7 +1898,6 @@
 </div>
 </div>
 </div>
-
 <div class="section" id="schema-vs-structured">
 <div class="section-header">
 <h2>Tool Schema vs Structured Output 如何选择</h2>
@@ -1956,7 +1927,6 @@
 <div class="callout-body"><strong>在 SRE Agent 里的典型分工：</strong>Router 阶段判断 workflow 类型 → Structured Output（只要决策，不执行动作）。工具执行阶段调 query_logs / check_metrics → Tool Schema（真正执行，结果回填继续推理）。最终生成诊断报告 → Structured Output（把所有结论整理成结构化格式）。</div>
 </div>
 </div>
-
 <div class="section" id="sse-protocol">
 <div class="section-header">
 <h2>SSE 协议格式</h2>
@@ -2024,7 +1994,6 @@ data: line2
 <div class="dg-cell" colspan="2"><code style="font-family:var(--mono);color:var(--teal)">text/event-stream</code>（W3C 标准规定）</div>
 </div>
 </div>
-
 <div class="section" id="sse-openai">
 <div class="section-header">
 <h2>OpenAI SSE 解析</h2>
@@ -2116,7 +2085,6 @@ data: [DONE]</pre>
 }</pre>
 </div>
 </div>
-
 <div class="section" id="sse-anthropic">
 <div class="section-header">
 <h2>Anthropic SSE 解析</h2>
@@ -2232,7 +2200,6 @@ data: {"type":"message_stop"}</pre>
 }</pre>
 </div>
 </div>
-
 <div class="section" id="sse-tool-stream">
 <div class="section-header">
 <h2>工具调用 Streaming</h2>
@@ -2322,7 +2289,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 }</pre>
 </div>
 </div>
-
 <div class="section" id="ex-system">
 <div class="section-header">
 <h2>完整 HTTP 示例：System Prompt</h2>
@@ -2376,7 +2342,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 </div>
 </div>
 </div>
-
 <div class="section" id="ex-tools">
 <div class="section-header">
 <h2>完整 HTTP 示例：Tools Schema</h2>
@@ -2454,7 +2419,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 </div>
 </div>
 </div>
-
 <div class="section" id="ex-toolresult">
 <div class="section-header">
 <h2>完整 HTTP 示例：工具结果回填</h2>
@@ -2548,7 +2512,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 </div>
 </div>
 </div>
-
 <div class="section" id="ex-response">
 <div class="section-header">
 <h2>完整 HTTP 示例：Response 解析</h2>
@@ -2640,7 +2603,6 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 </div>
 </div>
 </div>
-
 <footer>
   Built by <a href="https://github.com/second-curve-engineer" rel="noreferrer" target="_blank">second-curve-engineer</a>. This project is an independent engineering reference and is not affiliated with OpenAI or Anthropic.
 </footer>
@@ -2649,7 +2611,7 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 <script>
 const root = document.documentElement;
 const themeToggle = document.getElementById('theme-toggle');
-const savedTheme = root.dataset.theme || 'dark';
+const savedTheme = root.dataset.theme || 'light';
 
 function applyTheme(theme) {
   root.dataset.theme = theme;

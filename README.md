@@ -41,6 +41,7 @@
 - [错误处理与重试策略](#error-retry)
 - [Trace、成本与上下文管理](#trace-cost-context)
 - [常见踩坑](#gotchas)
+- [OpenAI Responses API 参数](#openai-responses)
 - [OpenAI 请求参数](#openai-req)
 - [Anthropic 请求参数](#anthropic-req)
 - [OpenAI 返回参数](#openai-resp)
@@ -330,6 +331,40 @@ return fallback("max_turns_exceeded")
 | 请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key + anthropic-version 必须带 ，缺少报 400 |
 | temperature 上限 | 最高 2.0 | 最高 1.0 ，超过报错 |
 | usage 字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens （不同） |
+
+<a id="openai-responses"></a>
+## OpenAI Responses API 参数
+
+`POST /v1/responses`
+
+> 定位： Responses API 是 OpenAI 面向新项目的统一响应接口。和 Chat Completions 相比，它把文本、多模态输入、内建工具、function calling、结构化输出、reasoning 和状态续接放到同一个 response 对象里。做 Agent Runtime 时，建议把它当作新的 OpenAI Adapter 目标，而不是直接把业务逻辑写死在原始字段上。
+
+| 字段 | 类型 | 典型取值 / 结构 | 说明与 Agent 关注点 |
+| --- | --- | --- | --- |
+| model 必填 | string | gpt-5 gpt-4.1 o3 | 指定模型。模型名变化快，生产环境以官方 model list 为准；Agent 代码不要把具体模型名写死在 workflow 里 |
+| input 重点 | string/array | string message items input_text input_image input_file | 核心输入字段。可以是简单字符串，也可以是 item list。相比 Chat Completions 的 messages，Responses API 更强调统一 input item 模型，适合多模态与状态续接 |
+| instructions 重点 | string/array | system / developer instructions | 系统或开发者指令。配合 previous_response_id 使用时，新的 instructions 不会自动继承上一轮，适合 Agent 在不同 workflow 间切换系统策略 |
+| tools 重点 | array | function file_search web_search computer_use | 工具列表。既支持自定义 function，也支持 OpenAI 内建工具。Agent Runtime 仍然要维护自己的 ToolRegistry、白名单和风险策略，不能只依赖 provider tools |
+| tool_choice 重点 | string/object | auto none required 指定工具 | 控制工具调用策略。建议在 Adapter 层统一为 allow / deny / require / forceTool，不要让业务层感知各 provider 原始格式 |
+| text.format | object | text json_schema json_object | 结构化输出配置。Responses API 中对应 Chat Completions 的 response_format；新模型优先使用 json_schema，而不是旧 JSON mode |
+| reasoning 重点 | object | effort summary | reasoning 模型相关配置。影响质量、延迟和成本；Agent 应按 workflow 设置预算，分类/路由类任务不应默认开启高 reasoning |
+| max_output_tokens 重点 | integer | 输出上限 | 限制响应生成 token，上限包含可见输出和 reasoning token。对应 Chat Completions 的 max_completion_tokens 语义，但字段名不同 |
+| previous_response_id | string | resp_xxx | 用于服务端状态续接。适合简单会话；如果 Agent Runtime 要完整可复盘、可 replay，仍建议自己持久化 input/output/trace |
+| truncation | string | disabled auto | 上下文超长处理策略。disabled 默认更可控，超长时直接失败；auto 会从会话开头丢弃内容，生产 Agent 需要谨慎使用，避免丢关键证据 |
+| stream | boolean | true false | 开启 SSE 流式输出。Responses API 的 streaming event 类型比 Chat Completions 更细，Adapter 应统一成 text_delta / tool_call_delta / done |
+| metadata | object | 自定义 KV | 写入 run_id / workflow / user_id 等追踪信息，便于成本归因和排障 |
+
+### Responses API 返回结构关注点
+
+| 字段 | 含义 | Agent 关注点 |
+| --- | --- | --- |
+| id | response id，例如 resp_xxx | 写入 Trace；如果使用 previous_response_id，下一轮会引用它 |
+| status | completed / incomplete / failed 等状态 | 不要只看有没有文本输出；incomplete 时要检查 incomplete_details |
+| output[] | 模型输出 item 列表 | 可能包含 message、function/tool call、reasoning 等多类 item；Adapter 需要分类提取 |
+| output_text | SDK/响应对象中的文本聚合便捷字段 | 适合最终文本读取；但 Agent Loop 判断工具调用时不能只读 output_text |
+| usage.input_tokens / output_tokens | 输入和输出 token 统计 | 字段名更接近 Anthropic；Adapter 可统一为 inputTokens / outputTokens |
+| usage.output_tokens_details.reasoning_tokens | reasoning token 消耗 | 成本和延迟分析必须记录，不能只看可见输出 token |
+| incomplete_details.reason | 不完整原因，例如 max_output_tokens | 映射成内部 stopReason=truncated，并进入重试/续写策略 |
 
 <a id="openai-req"></a>
 ## OpenAI 请求参数
@@ -1414,6 +1449,7 @@ Content-Type: application/json
 
 最后校验日期：2026-06-07
 
+- OpenAI Responses API: https://platform.openai.com/docs/api-reference/responses/create
 - OpenAI Chat Completions API: https://platform.openai.com/docs/api-reference/chat/create
 - OpenAI Structured Outputs: https://platform.openai.com/docs/guides/structured-outputs
 - Anthropic Messages API: https://docs.anthropic.com/en/api/messages

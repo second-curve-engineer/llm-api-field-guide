@@ -20,6 +20,7 @@ This is not a copy of official API documentation. It reorganizes the APIs around
 - Agent Loop state machine
 - Error handling and retry strategy
 - Trace, cost, and context management
+- OpenAI Responses API parameter overview
 - Tool schema and tool result differences
 - Streaming / SSE event parsing
 - Tool Schema vs Structured Output decision guide

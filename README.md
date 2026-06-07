@@ -15,6 +15,11 @@
 
 - 请求参数与返回参数对照
 - `finish_reason` 与 `stop_reason`
+- OpenAI Responses API 与 Chat Completions 的选择
+- Provider Adapter 设计
+- Agent Loop 状态机
+- 错误处理与重试策略
+- Trace、成本与上下文管理
 - Tool Schema 与工具结果回填差异
 - Streaming / SSE 事件解析
 - Tool Schema vs Structured Output 选择指南

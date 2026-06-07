@@ -14,6 +14,11 @@
 - [Anthropic 返回参数](#anthropic-resp)
 - [枚举值汇总](#enums)
 - [关键差异速查](#diff)
+- [OpenAI Responses API 选择](#responses-api)
+- [Provider Adapter 设计](#provider-adapter)
+- [Agent Loop 状态机](#loop-state-machine)
+- [错误处理与重试策略](#error-retry)
+- [Trace、成本与上下文管理](#trace-cost-context)
 - [完整 HTTP 示例：System Prompt](#ex-system)
 - [完整 HTTP 示例：Tools Schema](#ex-tools)
 - [完整 HTTP 示例：工具结果回填](#ex-toolresult)
@@ -187,6 +192,128 @@
 | 思考模式参数 | reasoning.effort (low/medium/high)，Responses API | thinking.type (enabled/disabled/ adaptive ) |
 | token 统计字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens |
 | 鉴权请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key: $ANTHROPIC_API_KEY + anthropic-version（必填） |
+
+<a id="responses-api"></a>
+## OpenAI Responses API 选择
+
+`新项目、旧项目与跨 Provider 抽象`
+
+> 结论： 本手册保留 Chat Completions，是因为它仍然是大量存量项目、SDK 示例和兼容服务的事实接口；新项目如果只接 OpenAI，优先评估 Responses API；如果要做 OpenAI / Anthropic 双 Provider，建议在 Adapter 层统一抽象，不把业务逻辑绑死在任一原始 API 上。
+
+| 选择项 | 适合场景 | Agent 工程关注点 | 建议 |
+| --- | --- | --- | --- |
+| Chat Completions | 存量代码、OpenAI 兼容服务、简单 tool calling | messages / tools / tool_calls 模型清晰，但和新能力的统一入口割裂 | 适合作为兼容层和对照基线 |
+| Responses API | 新 OpenAI 项目、多模态、内建工具、长期演进 | 更像统一响应对象，适合承载新能力；但和 Anthropic Messages 仍需 Adapter | 只接 OpenAI 时优先评估 |
+| Anthropic Messages | Claude 工具调用、thinking、长上下文与 prompt cache | content block 模型和 OpenAI 差异明显，工具结果回填格式完全不同 | 不要在业务层直接拼 Anthropic 原始结构 |
+| Provider Adapter | 需要多模型、多厂商或可替换 LLM 能力 | 把 stop reason、tool call、usage、stream event 收敛成内部协议 | Agent Runtime 推荐方案 |
+
+<a id="provider-adapter"></a>
+## Provider Adapter 设计
+
+`把 API 差异收敛成 Agent Runtime 内部协议`
+
+> 核心判断： 业务代码不应该直接依赖 OpenAI 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。
+
+**TypeScript Interface 内部协议**
+
+```ts
+type AgentStopReason =
+  | "final"
+  | "tool_call"
+  | "truncated"
+  | "refusal"
+  | "pause"
+  | "unknown"
+
+interface AgentToolCall {
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+
+interface AgentLlmResponse {
+  provider: "openai" | "anthropic"
+  model: string
+  requestId?: string
+  stopReason: AgentStopReason
+  text: string
+  toolCalls: AgentToolCall[]
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    reasoningTokens?: number
+    cacheReadTokens?: number
+  }
+  raw: unknown
+}
+
+interface LlmAdapter {
+  complete(request: AgentLlmRequest): Promise<AgentLlmResponse>
+  stream(request: AgentLlmRequest): AsyncIterable<AgentStreamEvent>
+}
+```
+
+| 差异点 | OpenAI | Anthropic | Adapter 内部处理 |
+| --- | --- | --- | --- |
+| 停止原因 | choices[0].finish_reason | 顶层 stop_reason | 映射为 AgentStopReason |
+| 工具参数 | function.arguments 是字符串 | tool_use.input 是对象 | 统一输出 AgentToolCall.input 对象 |
+| 工具结果回填 | role="tool" + tool_call_id | role="user" + tool_result block | 由 formatToolResult(provider, result) 隔离 |
+| 文本位置 | message.content | content[].text block | 统一拼成 response.text |
+| usage 字段 | prompt_tokens / completion_tokens | input_tokens / output_tokens | 统一成 inputTokens / outputTokens |
+| Streaming | data-only SSE + [DONE] | event typed SSE | 统一成 text_delta / tool_input_delta / done |
+
+<a id="loop-state-machine"></a>
+## Agent Loop 状态机
+
+`从字段判断升级为 Runtime 行为`
+
+| 状态 | OpenAI 信号 | Anthropic 信号 | Agent Runtime 行为 |
+| --- | --- | --- | --- |
+| 正常结束 | finish_reason=stop | stop_reason=end_turn | 提取文本，生成最终回答，写入 trace |
+| 需要工具 | tool_calls | tool_use | 校验工具白名单与 schema，执行工具，回填结果，再次请求 LLM |
+| 输出截断 | length | max_tokens | 记录不完整原因；可扩大 token 重试、请求续写或返回部分结果 |
+| 安全拒绝 | content_filter / refusal | refusal | 进入 fallback，给用户可解释提示，记录安全事件 |
+| 长任务暂停 | 无直接等价 | pause_turn | 持久化 PendingRun，等待 HITL 或外部事件后精准 resume |
+
+<a id="error-retry"></a>
+## 错误处理与重试策略
+
+`把 API 错误变成可控的 Runtime 分支`
+
+| 错误类型 | 常见原因 | Agent 行为 | 是否重试 |
+| --- | --- | --- | --- |
+| 400 | role 写错、tool_result 顺序错误、schema 不合法、max_tokens 缺失 | 记录 request snapshot，标记为 developer error，不自动盲重试 | 通常不重试 |
+| 401 / 403 | API key 无效、权限不足、模型不可用 | 熔断当前 provider，提示配置问题，避免循环调用 | 不重试 |
+| 429 | RPM / TPM / 并发限制触发 | 指数退避，按 run_id 记录 retry_count，可切备用模型 | 可重试 |
+| 5xx | Provider 短暂故障 | 短重试 + jitter；超过上限后 fallback 或切 provider | 可重试 |
+| Streaming parse error | 网络中断、JSON delta 未拼完整、[DONE] 前连接断开 | 保留 partial buffer，标记 stream_incomplete，必要时非流式重试 | 谨慎重试 |
+| Tool input invalid | 模型填参不符合 schema 或业务约束 | schema validation error 回填给模型，触发 self-correction | 可在 loop 内修正 |
+
+<a id="trace-cost-context"></a>
+## Trace、成本与上下文管理
+
+`Agent 可观测性不是日志打印，而是结构化证据链`
+
+| Trace 字段 | 来源 | 用途 | 说明 |
+| --- | --- | --- | --- |
+| provider / model | 请求配置 + 响应体 | 模型效果、成本和故障归因 | 响应中的实际 model 可能与请求别名不同 |
+| request_id | OpenAI id / Anthropic id | 和 provider 侧日志对齐 | 写入每次 LLM 调用 trace |
+| stop_reason | finish_reason / stop_reason | 解释 Agent 为什么停、为什么调工具、为什么失败 | 建议使用内部枚举 |
+| tool_calls | 响应中的工具调用 | 复盘工具选择、参数质量和风险动作 | 记录前先做敏感字段脱敏 |
+| latency_ms / retry_count | Runtime 计时与重试器 | 定位慢请求、限流和 provider 抖动 | 按 turn 记录，不只按 run 记录 |
+| input_tokens / output_tokens | usage 字段 | 成本统计和上下文膨胀预警 | OpenAI / Anthropic 字段名不同，Adapter 统一 |
+| reasoning_tokens / thinking_budget | reasoning / thinking 相关 usage 或请求参数 | 分析推理成本和复杂问题开销 | 不要只看 output_tokens |
+| cache_read_tokens | cached_tokens / cache_read_input_tokens | 评估 prompt cache 是否生效 | 适合长 system prompt 或工具说明复用场景 |
+| redaction_applied | Runtime 脱敏模块 | 公开演示和生产安全边界 | 保留“已脱敏”证据，不保留原文敏感值 |
+
+### 上下文管理建议
+
+| 问题 | 风险 | 处理方式 |
+| --- | --- | --- |
+| 历史消息无限追加 | 成本上升、上下文被挤爆、工具结果噪声干扰推理 | 按 turn 保留关键证据，对旧工具结果做摘要 |
+| System prompt 很长 | 每次请求重复计费，延迟增加 | 使用 prompt cache；Trace 中记录 cache 命中 token |
+| Reasoning / thinking 打开过大 | 复杂问题质量提升，但成本不可见地增加 | 按 workflow 设置预算，简单分类不用高 reasoning |
+| 工具返回过大 | LLM 被日志噪声淹没，诊断变慢 | 工具侧先聚合、截断、排序，只回填证据摘要 |
 
 <a id="ex-system"></a>
 ## 完整 HTTP 示例：System Prompt

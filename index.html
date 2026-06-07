@@ -426,6 +426,12 @@
     <li class="section-label">枚举 &amp; 对照</li>
     <li><a href="#enums">枚举值汇总</a></li>
     <li><a href="#diff">关键差异速查</a></li>
+    <li class="section-label">工程决策</li>
+    <li><a href="#responses-api">Responses API 选择</a></li>
+    <li><a href="#provider-adapter">Provider Adapter</a></li>
+    <li><a href="#loop-state-machine">Agent 状态机</a></li>
+    <li><a href="#error-retry">错误处理与重试</a></li>
+    <li><a href="#trace-cost-context">Trace 与成本</a></li>
     <li class="section-label">HTTP 示例</li>
     <li><a href="#ex-system">System Prompt</a></li>
     <li><a href="#ex-tools">Tools Schema</a></li>
@@ -1024,6 +1030,220 @@
       <tr class="diff-row"><td class="field">鉴权请求头</td><td class="note">Authorization: Bearer $OPENAI_API_KEY</td><td class="note">x-api-key: $ANTHROPIC_API_KEY + <strong style="color:#e8e8f0">anthropic-version（必填）</strong></td></tr>
     </tbody>
   </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- OpenAI Responses API 选择 -->
+<!-- ══════════════════════════════════════ -->
+<div class="section" id="responses-api">
+  <div class="section-header">
+    <h2>OpenAI Responses API 选择</h2>
+    <span class="label">新项目、旧项目与跨 Provider 抽象</span>
+  </div>
+
+  <div class="callout callout-info">
+    <span class="callout-icon">ℹ</span>
+    <div class="callout-body"><strong>结论：</strong>本手册保留 Chat Completions，是因为它仍然是大量存量项目、SDK 示例和兼容服务的事实接口；新项目如果只接 OpenAI，优先评估 Responses API；如果要做 OpenAI / Anthropic 双 Provider，建议在 Adapter 层统一抽象，不把业务逻辑绑死在任一原始 API 上。</div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">选择项</th>
+        <th style="width:28%">适合场景</th>
+        <th style="width:25%">Agent 工程关注点</th>
+        <th>建议</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="field">Chat Completions</td><td class="note">存量代码、OpenAI 兼容服务、简单 tool calling</td><td class="note">messages / tools / tool_calls 模型清晰，但和新能力的统一入口割裂</td><td class="note">适合作为兼容层和对照基线</td></tr>
+      <tr><td class="field">Responses API</td><td class="note">新 OpenAI 项目、多模态、内建工具、长期演进</td><td class="note">更像统一响应对象，适合承载新能力；但和 Anthropic Messages 仍需 Adapter</td><td class="note">只接 OpenAI 时优先评估</td></tr>
+      <tr><td class="field">Anthropic Messages</td><td class="note">Claude 工具调用、thinking、长上下文与 prompt cache</td><td class="note">content block 模型和 OpenAI 差异明显，工具结果回填格式完全不同</td><td class="note">不要在业务层直接拼 Anthropic 原始结构</td></tr>
+      <tr><td class="field">Provider Adapter</td><td class="note">需要多模型、多厂商或可替换 LLM 能力</td><td class="note">把 stop reason、tool call、usage、stream event 收敛成内部协议</td><td class="note">Agent Runtime 推荐方案</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- Provider Adapter 设计 -->
+<!-- ══════════════════════════════════════ -->
+<div class="section" id="provider-adapter">
+  <div class="section-header">
+    <h2>Provider Adapter 设计</h2>
+    <span class="label">把 API 差异收敛成 Agent Runtime 内部协议</span>
+  </div>
+
+  <div class="callout callout-key">
+    <span class="callout-icon">★</span>
+    <div class="callout-body"><strong>核心判断：</strong>业务代码不应该直接依赖 OpenAI 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。</div>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header"><span class="lang">TypeScript Interface</span><span class="provider p-openai" style="background:transparent;border:1px solid #3a3a48;color:#9898b0;">内部协议</span></div>
+    <pre><span class="hl-key">type</span> AgentStopReason =
+  | <span class="hl-str">"final"</span>
+  | <span class="hl-str">"tool_call"</span>
+  | <span class="hl-str">"truncated"</span>
+  | <span class="hl-str">"refusal"</span>
+  | <span class="hl-str">"pause"</span>
+  | <span class="hl-str">"unknown"</span>
+
+<span class="hl-key">interface</span> AgentToolCall {
+  id: string
+  name: string
+  input: Record&lt;string, unknown&gt;
+}
+
+<span class="hl-key">interface</span> AgentLlmResponse {
+  provider: <span class="hl-str">"openai"</span> | <span class="hl-str">"anthropic"</span>
+  model: string
+  requestId?: string
+  stopReason: AgentStopReason
+  text: string
+  toolCalls: AgentToolCall[]
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    reasoningTokens?: number
+    cacheReadTokens?: number
+  }
+  raw: unknown
+}
+
+<span class="hl-key">interface</span> LlmAdapter {
+  complete(request: AgentLlmRequest): Promise&lt;AgentLlmResponse&gt;
+  stream(request: AgentLlmRequest): AsyncIterable&lt;AgentStreamEvent&gt;
+}</pre>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th style="width:24%">差异点</th><th style="width:26%">OpenAI</th><th style="width:26%">Anthropic</th><th>Adapter 内部处理</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="field">停止原因</td><td class="note">choices[0].finish_reason</td><td class="note">顶层 stop_reason</td><td class="note">映射为 AgentStopReason</td></tr>
+      <tr><td class="field">工具参数</td><td class="note">function.arguments 是字符串</td><td class="note">tool_use.input 是对象</td><td class="note">统一输出 AgentToolCall.input 对象</td></tr>
+      <tr><td class="field">工具结果回填</td><td class="note">role="tool" + tool_call_id</td><td class="note">role="user" + tool_result block</td><td class="note">由 formatToolResult(provider, result) 隔离</td></tr>
+      <tr><td class="field">文本位置</td><td class="note">message.content</td><td class="note">content[].text block</td><td class="note">统一拼成 response.text</td></tr>
+      <tr><td class="field">usage 字段</td><td class="note">prompt_tokens / completion_tokens</td><td class="note">input_tokens / output_tokens</td><td class="note">统一成 inputTokens / outputTokens</td></tr>
+      <tr><td class="field">Streaming</td><td class="note">data-only SSE + [DONE]</td><td class="note">event typed SSE</td><td class="note">统一成 text_delta / tool_input_delta / done</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- Agent Loop 状态机 -->
+<!-- ══════════════════════════════════════ -->
+<div class="section" id="loop-state-machine">
+  <div class="section-header">
+    <h2>Agent Loop 状态机</h2>
+    <span class="label">从字段判断升级为 Runtime 行为</span>
+  </div>
+
+  <div class="decision-grid" style="grid-template-columns:1fr 1fr 1fr 1.4fr">
+    <div class="dg-cell dg-header">状态</div>
+    <div class="dg-cell dg-header dg-openai">OpenAI 信号</div>
+    <div class="dg-cell dg-header dg-anthropic">Anthropic 信号</div>
+    <div class="dg-cell dg-header">Agent Runtime 行为</div>
+    <div class="dg-cell">正常结束</div>
+    <div class="dg-cell"><span class="chip">finish_reason=stop</span></div>
+    <div class="dg-cell"><span class="chip">stop_reason=end_turn</span></div>
+    <div class="dg-cell">提取文本，生成最终回答，写入 trace</div>
+    <div class="dg-cell hl">需要工具</div>
+    <div class="dg-cell hl"><span class="chip">tool_calls</span></div>
+    <div class="dg-cell hl"><span class="chip">tool_use</span></div>
+    <div class="dg-cell hl">校验工具白名单与 schema，执行工具，回填结果，再次请求 LLM</div>
+    <div class="dg-cell">输出截断</div>
+    <div class="dg-cell"><span class="chip">length</span></div>
+    <div class="dg-cell"><span class="chip">max_tokens</span></div>
+    <div class="dg-cell">记录不完整原因；可扩大 token 重试、请求续写或返回部分结果</div>
+    <div class="dg-cell">安全拒绝</div>
+    <div class="dg-cell"><span class="chip">content_filter</span> / <span class="chip">refusal</span></div>
+    <div class="dg-cell"><span class="chip">refusal</span></div>
+    <div class="dg-cell">进入 fallback，给用户可解释提示，记录安全事件</div>
+    <div class="dg-cell">长任务暂停</div>
+    <div class="dg-cell">无直接等价</div>
+    <div class="dg-cell"><span class="chip">pause_turn</span></div>
+    <div class="dg-cell">持久化 PendingRun，等待 HITL 或外部事件后精准 resume</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- 错误处理与重试 -->
+<!-- ══════════════════════════════════════ -->
+<div class="section" id="error-retry">
+  <div class="section-header">
+    <h2>错误处理与重试策略</h2>
+    <span class="label">把 API 错误变成可控的 Runtime 分支</span>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th style="width:18%">错误类型</th><th style="width:28%">常见原因</th><th style="width:28%">Agent 行为</th><th>是否重试</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="field">400</td><td class="note">role 写错、tool_result 顺序错误、schema 不合法、max_tokens 缺失</td><td class="note">记录 request snapshot，标记为 developer error，不自动盲重试</td><td class="note">通常不重试</td></tr>
+      <tr><td class="field">401 / 403</td><td class="note">API key 无效、权限不足、模型不可用</td><td class="note">熔断当前 provider，提示配置问题，避免循环调用</td><td class="note">不重试</td></tr>
+      <tr><td class="field">429</td><td class="note">RPM / TPM / 并发限制触发</td><td class="note">指数退避，按 run_id 记录 retry_count，可切备用模型</td><td class="note">可重试</td></tr>
+      <tr><td class="field">5xx</td><td class="note">Provider 短暂故障</td><td class="note">短重试 + jitter；超过上限后 fallback 或切 provider</td><td class="note">可重试</td></tr>
+      <tr><td class="field">Streaming parse error</td><td class="note">网络中断、JSON delta 未拼完整、[DONE] 前连接断开</td><td class="note">保留 partial buffer，标记 stream_incomplete，必要时非流式重试</td><td class="note">谨慎重试</td></tr>
+      <tr><td class="field">Tool input invalid</td><td class="note">模型填参不符合 schema 或业务约束</td><td class="note">schema validation error 回填给模型，触发 self-correction</td><td class="note">可在 loop 内修正</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ -->
+<!-- Trace 与成本 -->
+<!-- ══════════════════════════════════════ -->
+<div class="section" id="trace-cost-context">
+  <div class="section-header">
+    <h2>Trace、成本与上下文管理</h2>
+    <span class="label">Agent 可观测性不是日志打印，而是结构化证据链</span>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th style="width:22%">Trace 字段</th><th style="width:28%">来源</th><th style="width:28%">用途</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="field">provider / model</td><td class="note">请求配置 + 响应体</td><td class="note">模型效果、成本和故障归因</td><td class="note">响应中的实际 model 可能与请求别名不同</td></tr>
+      <tr><td class="field">request_id</td><td class="note">OpenAI id / Anthropic id</td><td class="note">和 provider 侧日志对齐</td><td class="note">写入每次 LLM 调用 trace</td></tr>
+      <tr><td class="field">stop_reason</td><td class="note">finish_reason / stop_reason</td><td class="note">解释 Agent 为什么停、为什么调工具、为什么失败</td><td class="note">建议使用内部枚举</td></tr>
+      <tr><td class="field">tool_calls</td><td class="note">响应中的工具调用</td><td class="note">复盘工具选择、参数质量和风险动作</td><td class="note">记录前先做敏感字段脱敏</td></tr>
+      <tr><td class="field">latency_ms / retry_count</td><td class="note">Runtime 计时与重试器</td><td class="note">定位慢请求、限流和 provider 抖动</td><td class="note">按 turn 记录，不只按 run 记录</td></tr>
+      <tr><td class="field">input_tokens / output_tokens</td><td class="note">usage 字段</td><td class="note">成本统计和上下文膨胀预警</td><td class="note">OpenAI / Anthropic 字段名不同，Adapter 统一</td></tr>
+      <tr><td class="field">reasoning_tokens / thinking_budget</td><td class="note">reasoning / thinking 相关 usage 或请求参数</td><td class="note">分析推理成本和复杂问题开销</td><td class="note">不要只看 output_tokens</td></tr>
+      <tr><td class="field">cache_read_tokens</td><td class="note">cached_tokens / cache_read_input_tokens</td><td class="note">评估 prompt cache 是否生效</td><td class="note">适合长 system prompt 或工具说明复用场景</td></tr>
+      <tr><td class="field">redaction_applied</td><td class="note">Runtime 脱敏模块</td><td class="note">公开演示和生产安全边界</td><td class="note">保留“已脱敏”证据，不保留原文敏感值</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>上下文管理建议</h3>
+  <div class="decision-grid" style="grid-template-columns:1fr 1.4fr 1.4fr">
+    <div class="dg-cell dg-header">问题</div>
+    <div class="dg-cell dg-header">风险</div>
+    <div class="dg-cell dg-header">处理方式</div>
+    <div class="dg-cell">历史消息无限追加</div>
+    <div class="dg-cell">成本上升、上下文被挤爆、工具结果噪声干扰推理</div>
+    <div class="dg-cell">按 turn 保留关键证据，对旧工具结果做摘要</div>
+    <div class="dg-cell">System prompt 很长</div>
+    <div class="dg-cell">每次请求重复计费，延迟增加</div>
+    <div class="dg-cell">使用 prompt cache；Trace 中记录 cache 命中 token</div>
+    <div class="dg-cell">Reasoning / thinking 打开过大</div>
+    <div class="dg-cell">复杂问题质量提升，但成本不可见地增加</div>
+    <div class="dg-cell">按 workflow 设置预算，简单分类不用高 reasoning</div>
+    <div class="dg-cell">工具返回过大</div>
+    <div class="dg-cell">LLM 被日志噪声淹没，诊断变慢</div>
+    <div class="dg-cell">工具侧先聚合、截断、排序，只回填证据摘要</div>
   </div>
 </div>
 

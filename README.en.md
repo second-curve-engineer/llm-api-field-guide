@@ -15,6 +15,11 @@ This is not a copy of official API documentation. It reorganizes the APIs around
 
 - Request and response parameter comparison
 - `finish_reason` vs `stop_reason`
+- OpenAI Responses API vs Chat Completions selection
+- Provider Adapter design
+- Agent Loop state machine
+- Error handling and retry strategy
+- Trace, cost, and context management
 - Tool schema and tool result differences
 - Streaming / SSE event parsing
 - Tool Schema vs Structured Output decision guide

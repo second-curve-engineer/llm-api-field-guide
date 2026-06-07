@@ -42,10 +42,10 @@
 - [Trace、成本与上下文管理](#trace-cost-context)
 - [常见踩坑](#gotchas)
 - [OpenAI Responses API 参数](#openai-responses)
-- [OpenAI 请求参数](#openai-req)
-- [Anthropic 请求参数](#anthropic-req)
-- [OpenAI 返回参数](#openai-resp)
-- [Anthropic 返回参数](#anthropic-resp)
+- [OpenAI Chat Completions 请求参数](#openai-req)
+- [Anthropic Messages API 请求参数](#anthropic-req)
+- [OpenAI Chat Completions 返回参数](#openai-resp)
+- [Anthropic Messages API 返回参数](#anthropic-resp)
 - [Tool Schema 用法](#tool-schema)
 - [Structured Output](#structured-output)
 - [Tool Schema vs Structured Output 如何选择](#schema-vs-structured)
@@ -367,7 +367,7 @@ return fallback("max_turns_exceeded")
 | incomplete_details.reason | 不完整原因，例如 max_output_tokens | 映射成内部 stopReason=truncated，并进入重试/续写策略 |
 
 <a id="openai-req"></a>
-## OpenAI 请求参数
+## OpenAI Chat Completions 请求参数
 
 `POST /v1/chat/completions`
 
@@ -390,7 +390,7 @@ return fallback("max_turns_exceeded")
 | logprobs / top_logprobs | bool/int | top_logprobs: 0~20 | 返回 token 概率。Eval / 分类置信度场景使用，普通 Agent 不需要 |
 
 <a id="anthropic-req"></a>
-## Anthropic 请求参数
+## Anthropic Messages API 请求参数
 
 `POST /v1/messages`
 
@@ -413,7 +413,7 @@ return fallback("max_turns_exceeded")
 | metadata | object | 含 user_id | 打用户标记，用于安全和滥用检测 |
 
 <a id="openai-resp"></a>
-## OpenAI 返回参数
+## OpenAI Chat Completions 返回参数
 
 `Chat Completions Response`
 
@@ -433,7 +433,7 @@ return fallback("max_turns_exceeded")
 | created | integer | Unix timestamp | 请求创建时间，写 Trace 时记录 |
 
 <a id="anthropic-resp"></a>
-## Anthropic 返回参数
+## Anthropic Messages API 返回参数
 
 `Messages Response`
 

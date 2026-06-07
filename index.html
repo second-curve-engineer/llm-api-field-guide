@@ -387,9 +387,10 @@
   }
   .code-header .provider {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 10.5px;
     padding: 2px 8px;
     border-radius: 3px;
+    white-space: nowrap;
   }
   .code-header .p-openai { background: var(--green-dim); color: var(--green); }
   .code-header .p-anthropic { background: var(--purple-dim); color: var(--purple); }
@@ -509,6 +510,63 @@
   .dg-openai { color: var(--green); }
   .dg-anthropic { color: var(--purple); }
 
+  @media (max-width: 760px) {
+    .layout {
+      display: block;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 12;
+      width: 100%;
+      height: auto;
+      max-height: none;
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 0 0.5rem;
+    }
+    nav .logo {
+      padding: 0 1rem 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    nav ul {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding: 0 0.75rem 0.25rem;
+    }
+    nav ul li {
+      flex: 0 0 auto;
+    }
+    nav ul .section-label {
+      display: none;
+    }
+    nav ul li a {
+      white-space: nowrap;
+    }
+    main {
+      max-width: none;
+      padding: 1.25rem 1rem;
+    }
+    .section-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .diff-grid {
+      grid-template-columns: 1fr;
+    }
+    .code-header {
+      gap: 8px;
+    }
+    .code-header .lang {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -564,7 +622,7 @@
 <li><a href="#schema-vs-structured">如何选择</a></li>
 <li class="section-label">Streaming · SSE</li>
 <li><a href="#sse-protocol">SSE 协议格式</a></li>
-<li><a href="#sse-openai">OpenAI SSE 解析</a></li>
+<li><a href="#sse-openai">Chat Completions SSE</a></li>
 <li><a href="#sse-anthropic">Anthropic SSE 解析</a></li>
 <li><a href="#sse-tool-stream">工具调用 Streaming</a></li>
 <li class="section-label">完整示例</li>
@@ -654,7 +712,7 @@
 <!-- SSE 协议格式 -->
 <!-- ══════════════════════════════════════ -->
 <!-- ══════════════════════════════════════ -->
-<!-- OpenAI SSE 解析 -->
+<!-- OpenAI Chat Completions SSE 解析 -->
 <!-- ══════════════════════════════════════ -->
 <!-- ══════════════════════════════════════ -->
 <!-- Anthropic SSE 解析 -->
@@ -714,7 +772,7 @@
 <h3>finish_reason / stop_reason —— Agent Loop 判断</h3>
 <div class="decision-grid">
 <div class="dg-cell dg-header">含义</div>
-<div class="dg-cell dg-header dg-openai">OpenAI finish_reason</div>
+<div class="dg-cell dg-header dg-openai">Chat Completions finish_reason</div>
 <div class="dg-cell dg-header dg-anthropic">Anthropic stop_reason</div>
 <div class="dg-cell">正常结束，读文本</div>
 <div class="dg-cell"><span class="chip">stop</span></div>
@@ -738,7 +796,7 @@
 <h3>tool_choice —— 工具调用策略</h3>
 <div class="decision-grid">
 <div class="dg-cell dg-header">策略</div>
-<div class="dg-cell dg-header dg-openai">OpenAI</div>
+<div class="dg-cell dg-header dg-openai">Chat Completions</div>
 <div class="dg-cell dg-header dg-anthropic">Anthropic</div>
 <div class="dg-cell">模型自决</div>
 <div class="dg-cell"><span class="chip">"auto"</span>（字符串）</div>
@@ -756,7 +814,7 @@
 <h3>Streaming 事件类型</h3>
 <div class="decision-grid">
 <div class="dg-cell dg-header">含义</div>
-<div class="dg-cell dg-header dg-openai">OpenAI SSE</div>
+<div class="dg-cell dg-header dg-openai">Chat Completions SSE</div>
 <div class="dg-cell dg-header dg-anthropic">Anthropic SSE</div>
 <div class="dg-cell">消息开始</div>
 <div class="dg-cell">（无独立事件）</div>
@@ -777,7 +835,7 @@
 <h3>messages role 枚举</h3>
 <div class="decision-grid">
 <div class="dg-cell dg-header">用途</div>
-<div class="dg-cell dg-header dg-openai">OpenAI role</div>
+<div class="dg-cell dg-header dg-openai">Chat Completions role</div>
 <div class="dg-cell dg-header dg-anthropic">Anthropic role</div>
 <div class="dg-cell">系统指令</div>
 <div class="dg-cell"><span class="chip">system</span> / <span class="chip">developer</span></div>
@@ -828,7 +886,7 @@
 </div>
 <div class="callout callout-key">
 <span class="callout-icon">★</span>
-<div class="callout-body"><strong>核心判断：</strong>业务代码不应该直接依赖 OpenAI 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。</div>
+<div class="callout-body"><strong>核心判断：</strong>业务代码不应该直接依赖 Chat Completions 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。</div>
 </div>
 <div class="code-block">
 <div class="code-header"><span class="lang">TypeScript Interface</span><span class="provider p-openai" style="background:transparent;border:1px solid #3a3a48;color:#9898b0;">内部协议</span></div>
@@ -890,7 +948,7 @@
 </div>
 <div class="decision-grid" style="grid-template-columns:1fr 1fr 1fr 1.4fr">
 <div class="dg-cell dg-header">状态</div>
-<div class="dg-cell dg-header dg-openai">OpenAI 信号</div>
+<div class="dg-cell dg-header dg-openai">Chat Completions 信号</div>
 <div class="dg-cell dg-header dg-anthropic">Anthropic 信号</div>
 <div class="dg-cell dg-header">Agent Runtime 行为</div>
 <div class="dg-cell">正常结束</div>
@@ -937,7 +995,7 @@
 
   traceResponse(response)
 
-  <span class="hl-comment">// OpenAI: response.choices[0].finish_reason</span>
+  <span class="hl-comment">// Chat Completions: response.choices[0].finish_reason</span>
   <span class="hl-comment">// Anthropic: response.stop_reason</span>
   <span class="hl-key">if</span> (isFinalText(response)) {
     <span class="hl-key">return</span> extractText(response)
@@ -960,7 +1018,7 @@
       toolResult = <span class="hl-key">await</span> runTool(call)
     }
 
-    <span class="hl-comment">// OpenAI: role="tool", tool_call_id</span>
+    <span class="hl-comment">// Chat Completions: role="tool", tool_call_id</span>
     <span class="hl-comment">// Anthropic: role="user", type="tool_result", tool_use_id</span>
     messages.push(formatToolResult(call, toolResult))
   }
@@ -1065,7 +1123,7 @@
 <thead>
 <tr>
 <th style="width:22%">场景</th>
-<th style="width:39%">OpenAI 注意</th>
+<th style="width:39%">Chat Completions 注意</th>
 <th style="width:39%">Anthropic 注意</th>
 </tr>
 </thead>
@@ -1266,7 +1324,7 @@
 <td class="field">max_tokens <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
 <td class="type">integer</td>
 <td>模型上限各不同</td>
-<td class="note"><strong style="color:#e8e8f0">Anthropic 特有——必填</strong>，OpenAI 是可选。开启 thinking 时需设大（16000+），thinking token 也计入此上限</td>
+<td class="note"><strong style="color:#e8e8f0">Anthropic 特有——必填</strong>，Chat Completions 是可选。开启 thinking 时需设大（16000+），thinking token 也计入此上限</td>
 </tr>
 <tr class="key-row">
 <td class="field">messages <span class="tag tag-req">必填</span><span class="tag tag-key">重点</span></td>
@@ -1290,37 +1348,37 @@
 <td class="field">tool_choice <span class="tag tag-key">重点</span></td>
 <td class="type">object</td>
 <td><div class="chips"><span class="chip">{type:"auto"}</span><span class="chip">{type:"any"}</span><span class="chip">{type:"tool",name:"..."}</span><span class="chip">{type:"none"}</span></div></td>
-<td class="note"><strong style="color:#e8e8f0">格式是对象，不是字符串</strong>。any=必须调工具（模型自选）；tool=强制指定工具名。对应 OpenAI 的 required 和 function 对象</td>
+<td class="note"><strong style="color:#e8e8f0">格式是对象，不是字符串</strong>。any=必须调工具（模型自选）；tool=强制指定工具名。对应 Chat Completions 的 required 和 function 对象</td>
 </tr>
 <tr>
 <td class="field">temperature</td>
 <td class="type">number</td>
 <td>0.0 ~ 1.0，默认 1.0</td>
-<td class="note"><strong style="color:#e8e8f0">上限是 1.0（OpenAI 是 2.0）</strong>。开启 thinking 时不建议修改</td>
+<td class="note"><strong style="color:#e8e8f0">上限是 1.0（Chat Completions 是 2.0）</strong>。开启 thinking 时不建议修改</td>
 </tr>
 <tr>
 <td class="field">top_p</td>
 <td class="type">number</td>
 <td>0.0 ~ 1.0</td>
-<td class="note">同 OpenAI，不要和 temperature 同时调</td>
+<td class="note">同 Chat Completions，不要和 temperature 同时调</td>
 </tr>
 <tr>
 <td class="field">top_k</td>
 <td class="type">integer</td>
 <td>正整数</td>
-<td class="note">OpenAI 没有此参数。限制候选 token 数量，一般不需要调</td>
+<td class="note">Chat Completions 没有此参数。限制候选 token 数量，一般不需要调</td>
 </tr>
 <tr>
 <td class="field">stream</td>
 <td class="type">boolean</td>
 <td><div class="chips"><span class="chip">true</span><span class="chip">false</span></div></td>
-<td class="note">事件类型更细（message_start / content_block_delta / message_stop），结构和 OpenAI 不同</td>
+<td class="note">事件类型更细（message_start / content_block_delta / message_stop），结构和 Chat Completions 不同</td>
 </tr>
 <tr>
 <td class="field">stop_sequences</td>
 <td class="type">array</td>
 <td>字符串数组</td>
-<td class="note">对应 OpenAI 的 stop。命中后 stop_reason="stop_sequence"</td>
+<td class="note">对应 Chat Completions 的 stop。命中后 stop_reason="stop_sequence"</td>
 </tr>
 <tr class="key-row">
 <td class="field">thinking <span class="tag tag-key">重点</span></td>
@@ -1468,13 +1526,13 @@
 <td class="field">stop_reason <span class="tag tag-key">重点</span></td>
 <td class="type">string</td>
 <td><div class="chips"><span class="chip">end_turn</span><span class="chip">tool_use</span><span class="chip">max_tokens</span><span class="chip">stop_sequence</span><span class="chip">refusal</span><span class="chip">pause_turn</span></div></td>
-<td class="note"><strong style="color:#e8e8f0">在顶层</strong>（OpenAI 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景）</td>
+<td class="note"><strong style="color:#e8e8f0">在顶层</strong>（Chat Completions 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景）</td>
 </tr>
 <tr class="key-row">
 <td class="field">content <span class="tag tag-key">重点</span></td>
 <td class="type">array</td>
 <td>—</td>
-<td class="note">内容块数组。<strong style="color:#e8e8f0">可同时含文本和工具调用</strong>（OpenAI 有 tool_calls 时 content=null，Anthropic 可并存）</td>
+<td class="note">内容块数组。<strong style="color:#e8e8f0">可同时含文本和工具调用</strong>（Chat Completions 有 tool_calls 时 content=null，Anthropic 可并存）</td>
 </tr>
 <tr class="key-row">
 <td class="field">content[].type <span class="tag tag-key">重点</span></td>
@@ -1492,7 +1550,7 @@
 <td class="field">content[tool_use].input <span class="tag tag-key">重点</span></td>
 <td class="type">object</td>
 <td>—</td>
-<td class="note"><strong style="color:#e8e8f0">已是 JSON 对象</strong>，直接用（OpenAI 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse</td>
+<td class="note"><strong style="color:#e8e8f0">已是 JSON 对象</strong>，直接用（Chat Completions 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse</td>
 </tr>
 <tr>
 <td class="field">model</td>
@@ -1653,7 +1711,7 @@
 </div>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">完整 HTTP 请求</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">完整 HTTP 请求</span><span class="provider p-openai">Chat Completions</span></div>
 <pre>{
   <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
   <span class="hl-key">"messages"</span>: [
@@ -1662,12 +1720,12 @@
   ],
   <span class="hl-key">"tools"</span>: [
     {
-      <span class="hl-comment">// OpenAI：外层包一层 type:function</span>
+      <span class="hl-comment">// OpenAI Chat Completions：外层包一层 type:function</span>
       <span class="hl-key">"type"</span>: <span class="hl-str">"function"</span>,
       <span class="hl-key">"function"</span>: {
         <span class="hl-key">"name"</span>: <span class="hl-str">"query_logs"</span>,
         <span class="hl-key">"description"</span>: <span class="hl-str">"查询服务错误日志。用户想了解服务错误时使用。"</span>,
-        <span class="hl-comment">// OpenAI 字段名：parameters</span>
+        <span class="hl-comment">// Chat Completions 字段名：parameters</span>
         <span class="hl-key">"parameters"</span>: {
           <span class="hl-key">"type"</span>: <span class="hl-str">"object"</span>,
           <span class="hl-key">"properties"</span>: {
@@ -1725,7 +1783,7 @@
 <h3>模型返回（工具调用）对比</h3>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">Chat Completions</span></div>
 <pre>{
   <span class="hl-key">"choices"</span>: [{
     <span class="hl-key">"message"</span>: {
@@ -1773,7 +1831,7 @@
 <h3>tool_choice 四种策略完整示例</h3>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">tool_choice 示例</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">tool_choice 示例</span><span class="provider p-openai">Chat Completions</span></div>
 <pre><span class="hl-comment">// 模型自己决定（默认）</span>
 <span class="hl-key">"tool_choice"</span>: <span class="hl-str">"auto"</span>
 
@@ -1797,7 +1855,7 @@
 <span class="hl-comment">// 禁止调工具</span>
 <span class="hl-key">"tool_choice"</span>: { <span class="hl-key">"type"</span>: <span class="hl-str">"none"</span> }
 
-<span class="hl-comment">// 必须调工具，模型自选哪个（对应 OpenAI required）</span>
+<span class="hl-comment">// 必须调工具，模型自选哪个（对应 Chat Completions required）</span>
 <span class="hl-key">"tool_choice"</span>: { <span class="hl-key">"type"</span>: <span class="hl-str">"any"</span> }
 
 <span class="hl-comment">// 强制调指定工具</span>
@@ -1815,11 +1873,11 @@
 </div>
 <div class="callout callout-info">
 <span class="callout-icon">ℹ</span>
-<div class="callout-body">适合<strong>不需要模型执行动作、只需要结构化分析结果</strong>的场景（如 Router 决策、诊断报告、意图分类）。OpenAI 用 <code style="font-family:var(--mono);color:var(--teal)">response_format</code>，Anthropic 没有此参数，用"输出工具 + tool_choice 强制"代替。</div>
+<div class="callout-body">适合<strong>不需要模型执行动作、只需要结构化分析结果</strong>的场景（如 Router 决策、诊断报告、意图分类）。OpenAI Chat Completions 用 <code style="font-family:var(--mono);color:var(--teal)">response_format</code>，Anthropic 没有此参数，用"输出工具 + tool_choice 强制"代替。</div>
 </div>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">完整 HTTP 请求</span><span class="provider p-openai">OpenAI — response_format</span></div>
+<div class="code-header"><span class="lang">完整 HTTP 请求</span><span class="provider p-openai">Chat Completions</span></div>
 <pre>{
   <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
   <span class="hl-key">"messages"</span>: [
@@ -1908,7 +1966,7 @@
 <h3>模型返回 &amp; 如何取结果</h3>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">Chat Completions</span></div>
 <pre>{
   <span class="hl-key">"choices"</span>: [{
     <span class="hl-key">"message"</span>: {
@@ -2027,7 +2085,7 @@ data: line2
 <h3>两家实现对比</h3>
 <div class="decision-grid" style="grid-template-columns:repeat(3,1fr)">
 <div class="dg-cell dg-header">对比项</div>
-<div class="dg-cell dg-header dg-openai">OpenAI</div>
+<div class="dg-cell dg-header dg-openai">Chat Completions</div>
 <div class="dg-cell dg-header dg-anthropic">Anthropic</div>
 <div class="dg-cell">event: 字段</div>
 <div class="dg-cell">不使用</div>
@@ -2050,12 +2108,12 @@ data: line2
 </div>
 <div class="section" id="sse-openai">
 <div class="section-header">
-<h2>OpenAI SSE 解析</h2>
-<span class="label">文本输出场景</span>
+<h2>OpenAI Chat Completions SSE 解析</h2>
+<span class="label">/v1/chat/completions 文本输出场景</span>
 </div>
 <h3>请求</h3>
 <div class="code-block">
-<div class="code-header"><span class="lang">HTTP Request</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">HTTP Request</span><span class="provider p-openai">Chat Completions</span></div>
 <pre><span class="hl-method">POST</span> <span class="hl-url">https://api.openai.com/v1/chat/completions</span>
 <span class="hl-key">Authorization</span>: Bearer $OPENAI_API_KEY
 <span class="hl-key">Content-Type</span>: application/json
@@ -2071,7 +2129,7 @@ data: line2
 </div>
 <h3>SSE 响应流</h3>
 <div class="code-block">
-<div class="code-header"><span class="lang">SSE Stream</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">SSE Stream</span><span class="provider p-openai">Chat Completions</span></div>
 <pre><span class="hl-comment"># 第一片：角色声明，content 为空字符串</span>
 data: {"id":"chatcmpl-abc","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
 
@@ -2094,7 +2152,7 @@ data: [DONE]</pre>
 <div class="callout-body"><strong>buffer 拼接不能省。</strong>TCP 传输时，一次 read() 拿到的字节数不确定，一个 SSE 事件可能被切成两个 chunk，必须用 buffer 拼接再按 <code style="font-family:var(--mono)">\n\n</code> 切事件。</div>
 </div>
 <div class="code-block">
-<div class="code-header"><span class="lang">TypeScript</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">TypeScript</span><span class="provider p-openai">Chat Completions</span></div>
 <pre><span class="hl-key">const</span> response = <span class="hl-key">await</span> fetch(<span class="hl-str">"https://api.openai.com/v1/chat/completions"</span>, {
   method: <span class="hl-str">"POST"</span>,
   headers: { <span class="hl-str">"Authorization"</span>: <span class="hl-str">`Bearer ${apiKey}`</span>, <span class="hl-str">"Content-Type"</span>: <span class="hl-str">"application/json"</span> },
@@ -2261,11 +2319,11 @@ data: {"type":"message_stop"}</pre>
 </div>
 <div class="callout callout-key">
 <span class="callout-icon">★</span>
-<div class="callout-body"><strong>最容易出错的地方：</strong>工具参数在 streaming 里是字符串片段逐步推送的，不能拿到一片就 JSON.parse，必须等 content_block_stop（Anthropic）或 finish_reason=tool_calls（OpenAI）出现后，整体 parse 一次。</div>
+<div class="callout-body"><strong>最容易出错的地方：</strong>工具参数在 streaming 里是字符串片段逐步推送的，不能拿到一片就 JSON.parse，必须等 content_block_stop（Anthropic）或 finish_reason=tool_calls（OpenAI Chat Completions）出现后，整体 parse 一次。</div>
 </div>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">SSE Stream（工具调用）</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">SSE Stream（工具调用）</span><span class="provider p-openai">Chat Completions</span></div>
 <pre><span class="hl-comment"># content=null，tool_calls 出现</span>
 data: {"choices":[{"delta":{"role":"assistant","content":null},"finish_reason":null}]}
 
@@ -2308,9 +2366,9 @@ event: message_delta
 data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 </div>
 </div>
-<h3>OpenAI 多工具并行时的 index 处理</h3>
+<h3>OpenAI Chat Completions 多工具并行时的 index 处理</h3>
 <div class="code-block">
-<div class="code-header"><span class="lang">TypeScript</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">TypeScript</span><span class="provider p-openai">Chat Completions</span></div>
 <pre><span class="hl-comment">// 用 map 按 index 分别收集每个工具调用的 arguments</span>
 <span class="hl-key">const</span> buffers: Record&lt;<span class="hl-key">number</span>, { id: <span class="hl-key">string</span>; name: <span class="hl-key">string</span>; argsBuf: <span class="hl-key">string</span> }&gt; = {}
 
@@ -2351,7 +2409,7 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 <div class="diff-col">
 <div class="code-header">
 <span class="lang">HTTP Request</span>
-<span class="provider p-openai">OpenAI</span>
+<span class="provider p-openai">Chat Completions</span>
 </div>
 <pre><span class="hl-method">POST</span> <span class="hl-url">https://api.openai.com/v1/chat/completions</span>
 <span class="hl-key">Authorization</span>: Bearer $OPENAI_API_KEY
@@ -2404,7 +2462,7 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 <div class="diff-col">
 <div class="code-header">
 <span class="lang">HTTP Request</span>
-<span class="provider p-openai">OpenAI</span>
+<span class="provider p-openai">Chat Completions</span>
 </div>
 <pre>{
   <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
@@ -2486,7 +2544,7 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 <div class="diff-col">
 <div class="code-header">
 <span class="lang">HTTP Request（含回填）</span>
-<span class="provider p-openai">OpenAI</span>
+<span class="provider p-openai">Chat Completions</span>
 </div>
 <pre>{
   <span class="hl-key">"model"</span>: <span class="hl-str">"gpt-4o"</span>,
@@ -2574,7 +2632,7 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 <h3>正常结束（文本输出）</h3>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">Chat Completions</span></div>
 <pre>{
   <span class="hl-key">"id"</span>: <span class="hl-str">"chatcmpl-abc"</span>,
   <span class="hl-key">"choices"</span>: [{
@@ -2612,7 +2670,7 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 <h3>需要调工具</h3>
 <div class="diff-grid">
 <div class="diff-col">
-<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">OpenAI</span></div>
+<div class="code-header"><span class="lang">Response Body</span><span class="provider p-openai">Chat Completions</span></div>
 <pre>{
   <span class="hl-key">"choices"</span>: [{
     <span class="hl-key">"message"</span>: {

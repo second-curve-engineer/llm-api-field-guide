@@ -50,7 +50,7 @@
 - [Structured Output](#structured-output)
 - [Tool Schema vs Structured Output 如何选择](#schema-vs-structured)
 - [SSE 协议格式](#sse-protocol)
-- [OpenAI SSE 解析](#sse-openai)
+- [OpenAI Chat Completions SSE 解析](#sse-openai)
 - [Anthropic SSE 解析](#sse-anthropic)
 - [工具调用 Streaming](#sse-tool-stream)
 - [完整 HTTP 示例：System Prompt](#ex-system)
@@ -95,7 +95,7 @@
 
 ### finish_reason / stop_reason —— Agent Loop 判断
 
-| 含义 | OpenAI finish_reason | Anthropic stop_reason |
+| 含义 | Chat Completions finish_reason | Anthropic stop_reason |
 | --- | --- | --- |
 | 正常结束，读文本 | stop | end_turn |
 | 需要执行工具 | tool_calls | tool_use |
@@ -106,7 +106,7 @@
 
 ### tool_choice —— 工具调用策略
 
-| 策略 | OpenAI | Anthropic |
+| 策略 | Chat Completions | Anthropic |
 | --- | --- | --- |
 | 模型自决 | "auto" （字符串） | {type:"auto"} （对象） |
 | 禁止工具 | "none" | {type:"none"} |
@@ -115,7 +115,7 @@
 
 ### Streaming 事件类型
 
-| 含义 | OpenAI SSE | Anthropic SSE |
+| 含义 | Chat Completions SSE | Anthropic SSE |
 | --- | --- | --- |
 | 消息开始 | （无独立事件） | message_start |
 | 文本增量 | choices[0].delta.content | content_block_delta (text_delta) |
@@ -125,7 +125,7 @@
 
 ### messages role 枚举
 
-| 用途 | OpenAI role | Anthropic role |
+| 用途 | Chat Completions role | Anthropic role |
 | --- | --- | --- |
 | 系统指令 | system / developer | 顶层 system 字段（不在 messages） |
 | 用户输入 | user | user |
@@ -151,7 +151,7 @@
 
 `把 API 差异收敛成 Agent Runtime 内部协议`
 
-> 核心判断： 业务代码不应该直接依赖 OpenAI 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。
+> 核心判断： 业务代码不应该直接依赖 Chat Completions 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。
 
 **TypeScript Interface 内部协议**
 
@@ -206,7 +206,7 @@ interface LlmAdapter {
 
 `从字段判断升级为 Runtime 行为`
 
-| 状态 | OpenAI 信号 | Anthropic 信号 | Agent Runtime 行为 |
+| 状态 | Chat Completions 信号 | Anthropic 信号 | Agent Runtime 行为 |
 | --- | --- | --- | --- |
 | 正常结束 | finish_reason=stop | stop_reason=end_turn | 提取文本，生成最终回答，写入 trace |
 | 需要工具 | tool_calls | tool_use | 校验工具白名单与 schema，执行工具，回填结果，再次请求 LLM |
@@ -234,7 +234,7 @@ for (turn of range(maxTurns)) {
 
   traceResponse(response)
 
-  // OpenAI: response.choices[0].finish_reason
+  // Chat Completions: response.choices[0].finish_reason
   // Anthropic: response.stop_reason
   if (isFinalText(response)) {
     return extractText(response)
@@ -257,7 +257,7 @@ for (turn of range(maxTurns)) {
       toolResult = await runTool(call)
     }
 
-    // OpenAI: role="tool", tool_call_id
+    // Chat Completions: role="tool", tool_call_id
     // Anthropic: role="user", type="tool_result", tool_use_id
     messages.push(formatToolResult(call, toolResult))
   }
@@ -320,7 +320,7 @@ return fallback("max_turns_exceeded")
 <a id="gotchas"></a>
 ## 常见踩坑
 
-| 场景 | OpenAI 注意 | Anthropic 注意 |
+| 场景 | Chat Completions 注意 | Anthropic 注意 |
 | --- | --- | --- |
 | 多轮历史维护 | tool_calls 的 assistant message 要完整保存（包括 content=null 那条） | assistant 的 content 是数组，要整个 block 数组存，不能只存 text |
 | 工具参数解析 | arguments 是 字符串 ，必须 JSON.parse，streaming 时需拼接完整再 parse | input 是对象直接用，但 streaming 的 input_json_delta 需拼接后再 parse |
@@ -366,16 +366,16 @@ return fallback("max_turns_exceeded")
 | 字段 | 类型 | 枚举值 / 取值范围 | 说明与 Agent 关注点 |
 | --- | --- | --- | --- |
 | model 必填 | string | claude-opus-4-5 claude-sonnet-4-5 claude-haiku-4-5 | 指定 Claude 模型版本 |
-| max_tokens 必填 重点 | integer | 模型上限各不同 | Anthropic 特有——必填 ，OpenAI 是可选。开启 thinking 时需设大（16000+），thinking token 也计入此上限 |
+| max_tokens 必填 重点 | integer | 模型上限各不同 | Anthropic 特有——必填 ，Chat Completions 是可选。开启 thinking 时需设大（16000+），thinking token 也计入此上限 |
 | messages 必填 重点 | array | role: user role: assistant | 只有两种 role 。tool result 也用 user role 承载（content block type=tool_result）。写 role=system 会报错 |
 | system 重点 | string/array | — | 顶层字段，不在 messages 里 。可以是字符串，也可以是 content block 数组（支持 prompt caching） |
 | tools 重点 | array | type: custom computer_use text_editor bash | 自定义工具含 name / description / input_schema （注意不是 parameters，是 Anthropic 特有字段名） |
-| tool_choice 重点 | object | {type:"auto"} {type:"any"} {type:"tool",name:"..."} {type:"none"} | 格式是对象，不是字符串 。any=必须调工具（模型自选）；tool=强制指定工具名。对应 OpenAI 的 required 和 function 对象 |
-| temperature | number | 0.0 ~ 1.0，默认 1.0 | 上限是 1.0（OpenAI 是 2.0） 。开启 thinking 时不建议修改 |
-| top_p | number | 0.0 ~ 1.0 | 同 OpenAI，不要和 temperature 同时调 |
-| top_k | integer | 正整数 | OpenAI 没有此参数。限制候选 token 数量，一般不需要调 |
-| stream | boolean | true false | 事件类型更细（message_start / content_block_delta / message_stop），结构和 OpenAI 不同 |
-| stop_sequences | array | 字符串数组 | 对应 OpenAI 的 stop。命中后 stop_reason="stop_sequence" |
+| tool_choice 重点 | object | {type:"auto"} {type:"any"} {type:"tool",name:"..."} {type:"none"} | 格式是对象，不是字符串 。any=必须调工具（模型自选）；tool=强制指定工具名。对应 Chat Completions 的 required 和 function 对象 |
+| temperature | number | 0.0 ~ 1.0，默认 1.0 | 上限是 1.0（Chat Completions 是 2.0） 。开启 thinking 时不建议修改 |
+| top_p | number | 0.0 ~ 1.0 | 同 Chat Completions，不要和 temperature 同时调 |
+| top_k | integer | 正整数 | Chat Completions 没有此参数。限制候选 token 数量，一般不需要调 |
+| stream | boolean | true false | 事件类型更细（message_start / content_block_delta / message_stop），结构和 Chat Completions 不同 |
+| stop_sequences | array | 字符串数组 | 对应 Chat Completions 的 stop。命中后 stop_reason="stop_sequence" |
 | thinking 重点 | object | type: enabled disabled adaptive | 开启思考模式。enabled 需指定 budget_tokens；adaptive 让模型自决思考深度（新模型推荐） |
 | metadata | object | 含 user_id | 打用户标记，用于安全和滥用检测 |
 
@@ -409,11 +409,11 @@ return fallback("max_turns_exceeded")
 | id | string | msg_xxx | 请求唯一 ID，写 Trace 用 |
 | type | string | message | 固定为 message |
 | role | string | assistant | 固定为 assistant |
-| stop_reason 重点 | string | end_turn tool_use max_tokens stop_sequence refusal pause_turn | 在顶层 （OpenAI 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景） |
-| content 重点 | array | — | 内容块数组。 可同时含文本和工具调用 （OpenAI 有 tool_calls 时 content=null，Anthropic 可并存） |
+| stop_reason 重点 | string | end_turn tool_use max_tokens stop_sequence refusal pause_turn | 在顶层 （Chat Completions 在 choices[0] 里）。pause_turn 用于长任务中断恢复（HITL 场景） |
+| content 重点 | array | — | 内容块数组。 可同时含文本和工具调用 （Chat Completions 有 tool_calls 时 content=null，Anthropic 可并存） |
 | content[].type 重点 | string | text tool_use thinking redacted_thinking | block 类型。tool_use 表示发起工具调用；thinking / redacted_thinking 是 extended thinking 协议块，可能是摘要、空 thinking 或加密数据，多轮工具调用时需原样保留 |
 | content[tool_use].id | string | toolu_xxx | 工具调用 ID。 回填 tool_result 时字段名为 tool_use_id（不是 tool_call_id） |
-| content[tool_use].input 重点 | object | — | 已是 JSON 对象 ，直接用（OpenAI 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse |
+| content[tool_use].input 重点 | object | — | 已是 JSON 对象 ，直接用（Chat Completions 是字符串，需 JSON.parse）。streaming 时 input_json_delta 需拼接后再 parse |
 | model | string | — | 实际使用的模型 |
 | stop_sequence | string/null | — | 命中的停止序列，stop_reason=stop_sequence 时不为 null |
 | usage 重点 | object | — | 含 input_tokens / output_tokens（字段名与 OpenAI 不同） |
@@ -460,7 +460,7 @@ return fallback("max_turns_exceeded")
 
 > Tool Schema 本质是 JSON Schema，放在 tools 数组里。 description 字段 决定模型什么时候调用这个工具，写得越清晰，模型选工具越准确。
 
-**完整 HTTP 请求 OpenAI**
+**完整 HTTP 请求 OpenAI Chat Completions**
 
 ```ts
 {
@@ -471,12 +471,12 @@ return fallback("max_turns_exceeded")
   ],
   "tools": [
     {
-      // OpenAI：外层包一层 type:function
+      // OpenAI Chat Completions：外层包一层 type:function
       "type": "function",
       "function": {
         "name": "query_logs",
         "description": "查询服务错误日志。用户想了解服务错误时使用。",
-        // OpenAI 字段名：parameters
+        // Chat Completions 字段名：parameters
         "parameters": {
           "type": "object",
           "properties": {
@@ -535,7 +535,7 @@ return fallback("max_turns_exceeded")
 
 ### 模型返回（工具调用）对比
 
-**Response Body OpenAI**
+**Response Body OpenAI Chat Completions**
 
 ```ts
 {
@@ -586,7 +586,7 @@ return fallback("max_turns_exceeded")
 
 ### tool_choice 四种策略完整示例
 
-**tool_choice 示例 OpenAI**
+**tool_choice 示例 OpenAI Chat Completions**
 
 ```ts
 // 模型自己决定（默认）
@@ -614,7 +614,7 @@ return fallback("max_turns_exceeded")
 // 禁止调工具
 "tool_choice": { "type": "none" }
 
-// 必须调工具，模型自选哪个（对应 OpenAI required）
+// 必须调工具，模型自选哪个（对应 Chat Completions required）
 "tool_choice": { "type": "any" }
 
 // 强制调指定工具
@@ -629,9 +629,9 @@ return fallback("max_turns_exceeded")
 
 `让模型的文字输出本身就是合法 JSON`
 
-> 适合 不需要模型执行动作、只需要结构化分析结果 的场景（如 Router 决策、诊断报告、意图分类）。OpenAI 用 response_format ，Anthropic 没有此参数，用"输出工具 + tool_choice 强制"代替。
+> 适合 不需要模型执行动作、只需要结构化分析结果 的场景（如 Router 决策、诊断报告、意图分类）。OpenAI Chat Completions 用 response_format ，Anthropic 没有此参数，用"输出工具 + tool_choice 强制"代替。
 
-**完整 HTTP 请求 OpenAI — response_format**
+**完整 HTTP 请求 OpenAI Chat Completions — response_format**
 
 ```ts
 {
@@ -723,7 +723,7 @@ return fallback("max_turns_exceeded")
 
 ### 模型返回 & 如何取结果
 
-**Response Body OpenAI**
+**Response Body OpenAI Chat Completions**
 
 ```ts
 {
@@ -826,7 +826,7 @@ data: line2
 
 ### 两家实现对比
 
-| 对比项 | OpenAI | Anthropic |
+| 对比项 | Chat Completions | Anthropic |
 | --- | --- | --- |
 | event: 字段 | 不使用 | 每个事件都带 |
 | data: 内容 | JSON 或 [DONE] | 始终是 JSON |
@@ -836,13 +836,13 @@ data: line2
 | Content-Type | text/event-stream （W3C 标准规定） |  |
 
 <a id="sse-openai"></a>
-## OpenAI SSE 解析
+## OpenAI Chat Completions SSE 解析
 
-`文本输出场景`
+`/v1/chat/completions 文本输出场景`
 
 ### 请求
 
-**HTTP Request OpenAI**
+**HTTP Request OpenAI Chat Completions**
 
 ```ts
 POST https://api.openai.com/v1/chat/completions
@@ -861,7 +861,7 @@ Content-Type: application/json
 
 ### SSE 响应流
 
-**SSE Stream OpenAI**
+**SSE Stream OpenAI Chat Completions**
 
 ```ts
 # 第一片：角色声明，content 为空字符串
@@ -885,7 +885,7 @@ data: [DONE]
 
 > buffer 拼接不能省。 TCP 传输时，一次 read() 拿到的字节数不确定，一个 SSE 事件可能被切成两个 chunk，必须用 buffer 拼接再按 \n\n 切事件。
 
-**TypeScript OpenAI**
+**TypeScript OpenAI Chat Completions**
 
 ```ts
 const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -1060,9 +1060,9 @@ while (true) {
 
 `arguments / input 分片传回，必须拼接后再 JSON.parse`
 
-> 最容易出错的地方： 工具参数在 streaming 里是字符串片段逐步推送的，不能拿到一片就 JSON.parse，必须等 content_block_stop（Anthropic）或 finish_reason=tool_calls（OpenAI）出现后，整体 parse 一次。
+> 最容易出错的地方： 工具参数在 streaming 里是字符串片段逐步推送的，不能拿到一片就 JSON.parse，必须等 content_block_stop（Anthropic）或 finish_reason=tool_calls（OpenAI Chat Completions）出现后，整体 parse 一次。
 
-**SSE Stream（工具调用） OpenAI**
+**SSE Stream（工具调用） OpenAI Chat Completions**
 
 ```ts
 # content=null，tool_calls 出现
@@ -1109,9 +1109,9 @@ event: message_delta
 data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}
 ```
 
-### OpenAI 多工具并行时的 index 处理
+### OpenAI Chat Completions 多工具并行时的 index 处理
 
-**TypeScript OpenAI**
+**TypeScript OpenAI Chat Completions**
 
 ```ts
 // 用 map 按 index 分别收集每个工具调用的 arguments
@@ -1149,7 +1149,7 @@ if (finishReason === "tool_calls") {
 <a id="ex-system"></a>
 ## 完整 HTTP 示例：System Prompt
 
-**HTTP Request OpenAI**
+**HTTP Request OpenAI Chat Completions**
 
 ```ts
 POST https://api.openai.com/v1/chat/completions
@@ -1196,7 +1196,7 @@ Content-Type: application/json
 <a id="ex-tools"></a>
 ## 完整 HTTP 示例：Tools Schema
 
-**HTTP Request OpenAI**
+**HTTP Request OpenAI Chat Completions**
 
 ```ts
 {
@@ -1271,7 +1271,7 @@ Content-Type: application/json
 
 > 工具执行完后，必须把完整历史（含 assistant 工具调用那条）+ 工具结果一起发给 LLM。两家格式完全不同，这是最容易写错的地方。
 
-**HTTP Request（含回填） OpenAI**
+**HTTP Request（含回填） OpenAI Chat Completions**
 
 ```ts
 {
@@ -1357,7 +1357,7 @@ Content-Type: application/json
 
 ### 正常结束（文本输出）
 
-**Response Body OpenAI**
+**Response Body OpenAI Chat Completions**
 
 ```ts
 {
@@ -1398,7 +1398,7 @@ Content-Type: application/json
 
 ### 需要调工具
 
-**Response Body OpenAI**
+**Response Body OpenAI Chat Completions**
 
 ```ts
 {

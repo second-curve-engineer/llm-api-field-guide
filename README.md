@@ -32,36 +32,304 @@
 
 ## 目录
 
+- [关键差异速查](#diff)
+- [枚举值汇总](#enums)
+- [OpenAI Responses API 选择](#responses-api)
+- [Provider Adapter 设计](#provider-adapter)
+- [Agent Loop 状态机](#loop-state-machine)
+- [Agent Loop 核心要点](#agent-loop)
+- [错误处理与重试策略](#error-retry)
+- [Trace、成本与上下文管理](#trace-cost-context)
+- [常见踩坑](#gotchas)
 - [OpenAI 请求参数](#openai-req)
 - [Anthropic 请求参数](#anthropic-req)
 - [OpenAI 返回参数](#openai-resp)
 - [Anthropic 返回参数](#anthropic-resp)
-- [枚举值汇总](#enums)
-- [关键差异速查](#diff)
-- [OpenAI Responses API 选择](#responses-api)
-- [Provider Adapter 设计](#provider-adapter)
-- [Agent Loop 状态机](#loop-state-machine)
-- [错误处理与重试策略](#error-retry)
-- [Trace、成本与上下文管理](#trace-cost-context)
-- [完整 HTTP 示例：System Prompt](#ex-system)
-- [完整 HTTP 示例：Tools Schema](#ex-tools)
-- [完整 HTTP 示例：工具结果回填](#ex-toolresult)
-- [完整 HTTP 示例：Response 解析](#ex-response)
-- [Agent Loop 核心要点](#agent-loop)
-- [常见踩坑](#gotchas)
+- [Tool Schema 用法](#tool-schema)
+- [Structured Output](#structured-output)
+- [Tool Schema vs Structured Output 如何选择](#schema-vs-structured)
 - [SSE 协议格式](#sse-protocol)
 - [OpenAI SSE 解析](#sse-openai)
 - [Anthropic SSE 解析](#sse-anthropic)
 - [工具调用 Streaming](#sse-tool-stream)
-- [Tool Schema 用法](#tool-schema)
-- [Structured Output](#structured-output)
-- [Tool Schema vs Structured Output 如何选择](#schema-vs-structured)
+- [完整 HTTP 示例：System Prompt](#ex-system)
+- [完整 HTTP 示例：Tools Schema](#ex-tools)
+- [完整 HTTP 示例：工具结果回填](#ex-toolresult)
+- [完整 HTTP 示例：Response 解析](#ex-response)
 
 ## 图例
 
 - `必填`：必填字段，缺少会报错
 - `重点`：Agent 场景重点关注
 - `枚举值`：有固定取值的字段
+
+<a id="diff"></a>
+## 关键差异速查
+
+`两家规范最容易混淆的地方`
+
+| 对比项 | OpenAI Chat Completions | Anthropic Messages |
+| --- | --- | --- |
+| System prompt 位置 | messages 数组里，role="system" 或 "developer" | 顶层 system 字段， 不在 messages 里 |
+| messages role 种类 | 5种：system / developer / user / assistant / tool | 2种：user / assistant |
+| max_tokens 是否必填 | 可选 | 必填 |
+| 工具 schema 字段名 | function. parameters | input_schema |
+| tool_choice 格式 | 字符串 "auto"/"none"/"required" 或对象 | 始终是对象 {type:"auto"/"any"/"tool"/"none"} |
+| 工具结果 role | role=" tool "，带 tool_call_id | role=" user "，content block type=tool_result，带 tool_use_id |
+| tool call 参数类型 | function.arguments 是 字符串 ，需 JSON.parse | tool_use.input 已是 JSON 对象 ，直接用 |
+| 文字 + 工具并存 | 有 tool_calls 时 content= null | content 数组里 text block 和 tool_use block 可并存 |
+| Loop 判断字段位置 | choices[0]. finish_reason | 顶层 stop_reason |
+| 正常结束枚举值 | " stop " | " end_turn " |
+| 调工具枚举值 | " tool_calls " | " tool_use " |
+| 截断枚举值 | " length " | " max_tokens " |
+| temperature 上限 | 2.0 | 1.0 |
+| 思考模式参数 | reasoning.effort (low/medium/high)，Responses API | thinking.type (enabled/disabled/ adaptive ) |
+| token 统计字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens |
+| 鉴权请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key: $ANTHROPIC_API_KEY + anthropic-version（必填） |
+
+<a id="enums"></a>
+## 枚举值汇总
+
+`所有有固定取值的字段`
+
+### finish_reason / stop_reason —— Agent Loop 判断
+
+| 含义 | OpenAI finish_reason | Anthropic stop_reason |
+| --- | --- | --- |
+| 正常结束，读文本 | stop | end_turn |
+| 需要执行工具 | tool_calls | tool_use |
+| 输出被截断 | length | max_tokens |
+| 安全拒绝 | content_filter | refusal |
+| 命中停止符 | stop （同正常结束） | stop_sequence |
+| 长任务中断可恢复 | — | pause_turn |
+
+### tool_choice —— 工具调用策略
+
+| 策略 | OpenAI | Anthropic |
+| --- | --- | --- |
+| 模型自决 | "auto" （字符串） | {type:"auto"} （对象） |
+| 禁止工具 | "none" | {type:"none"} |
+| 必须调工具（模型自选） | "required" | {type:"any"} |
+| 强制指定工具 | {type:"function",function:{name:"..."}} | {type:"tool",name:"..."} |
+
+### Streaming 事件类型
+
+| 含义 | OpenAI SSE | Anthropic SSE |
+| --- | --- | --- |
+| 消息开始 | （无独立事件） | message_start |
+| 文本增量 | choices[0].delta.content | content_block_delta (text_delta) |
+| 工具参数增量（需拼接） | delta.tool_calls[].function.arguments | content_block_delta (input_json_delta) |
+| stop_reason 出现 | finish_reason 非 null | message_delta |
+| 流结束 | [DONE] | message_stop |
+
+### messages role 枚举
+
+| 用途 | OpenAI role | Anthropic role |
+| --- | --- | --- |
+| 系统指令 | system / developer | 顶层 system 字段（不在 messages） |
+| 用户输入 | user | user |
+| 模型输出 | assistant | assistant |
+| 工具结果 | tool （第 5 种 role） | user （content block type=tool_result） |
+
+<a id="responses-api"></a>
+## OpenAI Responses API 选择
+
+`新项目、旧项目与跨 Provider 抽象`
+
+> 结论： 本手册保留 Chat Completions，是因为它仍然是大量存量项目、SDK 示例和兼容服务的事实接口；新项目如果只接 OpenAI，优先评估 Responses API；如果要做 OpenAI / Anthropic 双 Provider，建议在 Adapter 层统一抽象，不把业务逻辑绑死在任一原始 API 上。
+
+| 选择项 | 适合场景 | Agent 工程关注点 | 建议 |
+| --- | --- | --- | --- |
+| Chat Completions | 存量代码、OpenAI 兼容服务、简单 tool calling | messages / tools / tool_calls 模型清晰，但和新能力的统一入口割裂 | 适合作为兼容层和对照基线 |
+| Responses API | 新 OpenAI 项目、多模态、内建工具、长期演进 | 更像统一响应对象，适合承载新能力；但和 Anthropic Messages 仍需 Adapter | 只接 OpenAI 时优先评估 |
+| Anthropic Messages | Claude 工具调用、thinking、长上下文与 prompt cache | content block 模型和 OpenAI 差异明显，工具结果回填格式完全不同 | 不要在业务层直接拼 Anthropic 原始结构 |
+| Provider Adapter | 需要多模型、多厂商或可替换 LLM 能力 | 把 stop reason、tool call、usage、stream event 收敛成内部协议 | Agent Runtime 推荐方案 |
+
+<a id="provider-adapter"></a>
+## Provider Adapter 设计
+
+`把 API 差异收敛成 Agent Runtime 内部协议`
+
+> 核心判断： 业务代码不应该直接依赖 OpenAI 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。
+
+**TypeScript Interface 内部协议**
+
+```ts
+type AgentStopReason =
+  | "final"
+  | "tool_call"
+  | "truncated"
+  | "refusal"
+  | "pause"
+  | "unknown"
+
+interface AgentToolCall {
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+
+interface AgentLlmResponse {
+  provider: "openai" | "anthropic"
+  model: string
+  requestId?: string
+  stopReason: AgentStopReason
+  text: string
+  toolCalls: AgentToolCall[]
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    reasoningTokens?: number
+    cacheReadTokens?: number
+  }
+  raw: unknown
+}
+
+interface LlmAdapter {
+  complete(request: AgentLlmRequest): Promise<AgentLlmResponse>
+  stream(request: AgentLlmRequest): AsyncIterable<AgentStreamEvent>
+}
+```
+
+| 差异点 | OpenAI | Anthropic | Adapter 内部处理 |
+| --- | --- | --- | --- |
+| 停止原因 | choices[0].finish_reason | 顶层 stop_reason | 映射为 AgentStopReason |
+| 工具参数 | function.arguments 是字符串 | tool_use.input 是对象 | 统一输出 AgentToolCall.input 对象 |
+| 工具结果回填 | role="tool" + tool_call_id | role="user" + tool_result block | 由 formatToolResult(provider, result) 隔离 |
+| 文本位置 | message.content | content[].text block | 统一拼成 response.text |
+| usage 字段 | prompt_tokens / completion_tokens | input_tokens / output_tokens | 统一成 inputTokens / outputTokens |
+| Streaming | data-only SSE + [DONE] | event typed SSE | 统一成 text_delta / tool_input_delta / done |
+
+<a id="loop-state-machine"></a>
+## Agent Loop 状态机
+
+`从字段判断升级为 Runtime 行为`
+
+| 状态 | OpenAI 信号 | Anthropic 信号 | Agent Runtime 行为 |
+| --- | --- | --- | --- |
+| 正常结束 | finish_reason=stop | stop_reason=end_turn | 提取文本，生成最终回答，写入 trace |
+| 需要工具 | tool_calls | tool_use | 校验工具白名单与 schema，执行工具，回填结果，再次请求 LLM |
+| 输出截断 | length | max_tokens | 记录不完整原因；可扩大 token 重试、请求续写或返回部分结果 |
+| 安全拒绝 | content_filter / refusal | refusal | 进入 fallback，给用户可解释提示，记录安全事件 |
+| 长任务暂停 | 无直接等价 | pause_turn | 持久化 PendingRun，等待 HITL 或外部事件后精准 resume |
+
+<a id="agent-loop"></a>
+## Agent Loop 核心要点
+
+> 一句话： LLM API 只解决"一次无状态推理"，Agent Runtime 负责上下文、工具执行、状态、安全、可观测性。
+
+**TypeScript 伪代码 通用**
+
+```ts
+messages = [
+  { role: "system", content: systemPrompt },
+  { role: "user",   content: userInput },
+]
+
+for (turn of range(maxTurns)) {
+  traceRequest(messages, tools)
+
+  response = await callLLM({ model, messages, tools })
+
+  traceResponse(response)
+
+  // OpenAI: response.choices[0].finish_reason
+  // Anthropic: response.stop_reason
+  if (isFinalText(response)) {
+    return extractText(response)
+  }
+
+  toolCalls = extractToolCalls(response)
+
+  // 把 assistant 那条存入历史（含 tool_calls / content blocks）
+  messages.push(toAssistantMessage(response))
+
+  for (call of toolCalls) {
+    if (!allowedTools.has(call.name)) {
+      toolResult = { error: "tool_not_allowed" }
+    } else if (guardrailRejects(call)) {
+      toolResult = { error: "guardrail_rejected" }
+    } else if (needsApproval(call)) {
+      savePendingState(messages, call)
+      return { status: "pending_approval" }
+    } else {
+      toolResult = await runTool(call)
+    }
+
+    // OpenAI: role="tool", tool_call_id
+    // Anthropic: role="user", type="tool_result", tool_use_id
+    messages.push(formatToolResult(call, toolResult))
+  }
+}
+
+return fallback("max_turns_exceeded")
+```
+
+### finish_reason / stop_reason 决策树
+
+| 值（OpenAI / Anthropic） | 含义 | Agent 动作 |
+| --- | --- | --- |
+| stop / end_turn | 正常结束 | 提取文本，返回给用户 |
+| tool_calls / tool_use | 需要工具 | 执行工具 → 回填 → 再次请求 LLM |
+| length / max_tokens | 输出截断 | 可续写，或提示用户结果不完整 |
+| content_filter / refusal | 安全拒绝 | 给用户友好提示，记录 Trace |
+| stop_sequence | 命中停止符 | 按业务逻辑处理 |
+| pause_turn （Anthropic only） | 长任务中断 | 保存状态，HITL 审批后恢复 |
+
+<a id="error-retry"></a>
+## 错误处理与重试策略
+
+`把 API 错误变成可控的 Runtime 分支`
+
+| 错误类型 | 常见原因 | Agent 行为 | 是否重试 |
+| --- | --- | --- | --- |
+| 400 | role 写错、tool_result 顺序错误、schema 不合法、max_tokens 缺失 | 记录 request snapshot，标记为 developer error，不自动盲重试 | 通常不重试 |
+| 401 / 403 | API key 无效、权限不足、模型不可用 | 熔断当前 provider，提示配置问题，避免循环调用 | 不重试 |
+| 429 | RPM / TPM / 并发限制触发 | 指数退避，按 run_id 记录 retry_count，可切备用模型 | 可重试 |
+| 5xx | Provider 短暂故障 | 短重试 + jitter；超过上限后 fallback 或切 provider | 可重试 |
+| Streaming parse error | 网络中断、JSON delta 未拼完整、[DONE] 前连接断开 | 保留 partial buffer，标记 stream_incomplete，必要时非流式重试 | 谨慎重试 |
+| Tool input invalid | 模型填参不符合 schema 或业务约束 | schema validation error 回填给模型，触发 self-correction | 可在 loop 内修正 |
+
+<a id="trace-cost-context"></a>
+## Trace、成本与上下文管理
+
+`Agent 可观测性不是日志打印，而是结构化证据链`
+
+| Trace 字段 | 来源 | 用途 | 说明 |
+| --- | --- | --- | --- |
+| provider / model | 请求配置 + 响应体 | 模型效果、成本和故障归因 | 响应中的实际 model 可能与请求别名不同 |
+| request_id | OpenAI id / Anthropic id | 和 provider 侧日志对齐 | 写入每次 LLM 调用 trace |
+| stop_reason | finish_reason / stop_reason | 解释 Agent 为什么停、为什么调工具、为什么失败 | 建议使用内部枚举 |
+| tool_calls | 响应中的工具调用 | 复盘工具选择、参数质量和风险动作 | 记录前先做敏感字段脱敏 |
+| latency_ms / retry_count | Runtime 计时与重试器 | 定位慢请求、限流和 provider 抖动 | 按 turn 记录，不只按 run 记录 |
+| input_tokens / output_tokens | usage 字段 | 成本统计和上下文膨胀预警 | OpenAI / Anthropic 字段名不同，Adapter 统一 |
+| reasoning_tokens / thinking_budget | reasoning / thinking 相关 usage 或请求参数 | 分析推理成本和复杂问题开销 | 不要只看 output_tokens |
+| cache_read_tokens | cached_tokens / cache_read_input_tokens | 评估 prompt cache 是否生效 | 适合长 system prompt 或工具说明复用场景 |
+| redaction_applied | Runtime 脱敏模块 | 公开演示和生产安全边界 | 保留“已脱敏”证据，不保留原文敏感值 |
+
+### 上下文管理建议
+
+| 问题 | 风险 | 处理方式 |
+| --- | --- | --- |
+| 历史消息无限追加 | 成本上升、上下文被挤爆、工具结果噪声干扰推理 | 按 turn 保留关键证据，对旧工具结果做摘要 |
+| System prompt 很长 | 每次请求重复计费，延迟增加 | 使用 prompt cache；Trace 中记录 cache 命中 token |
+| Reasoning / thinking 打开过大 | 复杂问题质量提升，但成本不可见地增加 | 按 workflow 设置预算，简单分类不用高 reasoning |
+| 工具返回过大 | LLM 被日志噪声淹没，诊断变慢 | 工具侧先聚合、截断、排序，只回填证据摘要 |
+
+<a id="gotchas"></a>
+## 常见踩坑
+
+| 场景 | OpenAI 注意 | Anthropic 注意 |
+| --- | --- | --- |
+| 多轮历史维护 | tool_calls 的 assistant message 要完整保存（包括 content=null 那条） | assistant 的 content 是数组，要整个 block 数组存，不能只存 text |
+| 工具参数解析 | arguments 是 字符串 ，必须 JSON.parse，streaming 时需拼接完整再 parse | input 是对象直接用，但 streaming 的 input_json_delta 需拼接后再 parse |
+| System prompt | 新模型推荐 role="developer"，兼容服务通常只认 "system" | messages 里写 role="system" 直接报错 |
+| 结构化输出 | response_format.type="json_schema" 可精确约束 | 没有 response_format，用 tool_choice 强制调特定工具 来实现 |
+| max_tokens | 可以不填（有默认值） | 必须填， 忘填直接报错 |
+| 工具调用 ID | 回填用 tool_call_id ，对应 tool_calls[].id（call_ 前缀） | 回填用 tool_use_id ，对应 content[].id（toulu_ 前缀） |
+| 请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key + anthropic-version 必须带 ，缺少报 400 |
+| temperature 上限 | 最高 2.0 | 最高 1.0 ，超过报错 |
+| usage 字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens （不同） |
 
 <a id="openai-req"></a>
 ## OpenAI 请求参数
@@ -149,360 +417,52 @@
 | usage 重点 | object | — | 含 input_tokens / output_tokens（字段名与 OpenAI 不同） |
 | usage.cache_read_input_tokens | integer | — | 命中 prompt cache 的 token 数。做 system prompt 缓存优化时关注 |
 
-<a id="enums"></a>
-## 枚举值汇总
+<a id="tool-schema"></a>
+## Tool Schema 用法
 
-`所有有固定取值的字段`
+`告诉模型可以调用哪些工具、参数约束是什么`
 
-### finish_reason / stop_reason —— Agent Loop 判断
+> Tool Schema 本质是 JSON Schema，放在 tools 数组里。 description 字段 决定模型什么时候调用这个工具，写得越清晰，模型选工具越准确。
 
-| 含义 | OpenAI finish_reason | Anthropic stop_reason |
-| --- | --- | --- |
-| 正常结束，读文本 | stop | end_turn |
-| 需要执行工具 | tool_calls | tool_use |
-| 输出被截断 | length | max_tokens |
-| 安全拒绝 | content_filter | refusal |
-| 命中停止符 | stop （同正常结束） | stop_sequence |
-| 长任务中断可恢复 | — | pause_turn |
-
-### tool_choice —— 工具调用策略
-
-| 策略 | OpenAI | Anthropic |
-| --- | --- | --- |
-| 模型自决 | "auto" （字符串） | {type:"auto"} （对象） |
-| 禁止工具 | "none" | {type:"none"} |
-| 必须调工具（模型自选） | "required" | {type:"any"} |
-| 强制指定工具 | {type:"function",function:{name:"..."}} | {type:"tool",name:"..."} |
-
-### Streaming 事件类型
-
-| 含义 | OpenAI SSE | Anthropic SSE |
-| --- | --- | --- |
-| 消息开始 | （无独立事件） | message_start |
-| 文本增量 | choices[0].delta.content | content_block_delta (text_delta) |
-| 工具参数增量（需拼接） | delta.tool_calls[].function.arguments | content_block_delta (input_json_delta) |
-| stop_reason 出现 | finish_reason 非 null | message_delta |
-| 流结束 | [DONE] | message_stop |
-
-### messages role 枚举
-
-| 用途 | OpenAI role | Anthropic role |
-| --- | --- | --- |
-| 系统指令 | system / developer | 顶层 system 字段（不在 messages） |
-| 用户输入 | user | user |
-| 模型输出 | assistant | assistant |
-| 工具结果 | tool （第 5 种 role） | user （content block type=tool_result） |
-
-<a id="diff"></a>
-## 关键差异速查
-
-`两家规范最容易混淆的地方`
-
-| 对比项 | OpenAI Chat Completions | Anthropic Messages |
-| --- | --- | --- |
-| System prompt 位置 | messages 数组里，role="system" 或 "developer" | 顶层 system 字段， 不在 messages 里 |
-| messages role 种类 | 5种：system / developer / user / assistant / tool | 2种：user / assistant |
-| max_tokens 是否必填 | 可选 | 必填 |
-| 工具 schema 字段名 | function. parameters | input_schema |
-| tool_choice 格式 | 字符串 "auto"/"none"/"required" 或对象 | 始终是对象 {type:"auto"/"any"/"tool"/"none"} |
-| 工具结果 role | role=" tool "，带 tool_call_id | role=" user "，content block type=tool_result，带 tool_use_id |
-| tool call 参数类型 | function.arguments 是 字符串 ，需 JSON.parse | tool_use.input 已是 JSON 对象 ，直接用 |
-| 文字 + 工具并存 | 有 tool_calls 时 content= null | content 数组里 text block 和 tool_use block 可并存 |
-| Loop 判断字段位置 | choices[0]. finish_reason | 顶层 stop_reason |
-| 正常结束枚举值 | " stop " | " end_turn " |
-| 调工具枚举值 | " tool_calls " | " tool_use " |
-| 截断枚举值 | " length " | " max_tokens " |
-| temperature 上限 | 2.0 | 1.0 |
-| 思考模式参数 | reasoning.effort (low/medium/high)，Responses API | thinking.type (enabled/disabled/ adaptive ) |
-| token 统计字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens |
-| 鉴权请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key: $ANTHROPIC_API_KEY + anthropic-version（必填） |
-
-<a id="responses-api"></a>
-## OpenAI Responses API 选择
-
-`新项目、旧项目与跨 Provider 抽象`
-
-> 结论： 本手册保留 Chat Completions，是因为它仍然是大量存量项目、SDK 示例和兼容服务的事实接口；新项目如果只接 OpenAI，优先评估 Responses API；如果要做 OpenAI / Anthropic 双 Provider，建议在 Adapter 层统一抽象，不把业务逻辑绑死在任一原始 API 上。
-
-| 选择项 | 适合场景 | Agent 工程关注点 | 建议 |
-| --- | --- | --- | --- |
-| Chat Completions | 存量代码、OpenAI 兼容服务、简单 tool calling | messages / tools / tool_calls 模型清晰，但和新能力的统一入口割裂 | 适合作为兼容层和对照基线 |
-| Responses API | 新 OpenAI 项目、多模态、内建工具、长期演进 | 更像统一响应对象，适合承载新能力；但和 Anthropic Messages 仍需 Adapter | 只接 OpenAI 时优先评估 |
-| Anthropic Messages | Claude 工具调用、thinking、长上下文与 prompt cache | content block 模型和 OpenAI 差异明显，工具结果回填格式完全不同 | 不要在业务层直接拼 Anthropic 原始结构 |
-| Provider Adapter | 需要多模型、多厂商或可替换 LLM 能力 | 把 stop reason、tool call、usage、stream event 收敛成内部协议 | Agent Runtime 推荐方案 |
-
-<a id="provider-adapter"></a>
-## Provider Adapter 设计
-
-`把 API 差异收敛成 Agent Runtime 内部协议`
-
-> 核心判断： 业务代码不应该直接依赖 OpenAI 的 choices[0].finish_reason，也不应该直接依赖 Anthropic 的 content block。Agent Runtime 应该只面对统一的 AgentLlmResponse。
-
-**TypeScript Interface 内部协议**
-
-```ts
-type AgentStopReason =
-  | "final"
-  | "tool_call"
-  | "truncated"
-  | "refusal"
-  | "pause"
-  | "unknown"
-
-interface AgentToolCall {
-  id: string
-  name: string
-  input: Record<string, unknown>
-}
-
-interface AgentLlmResponse {
-  provider: "openai" | "anthropic"
-  model: string
-  requestId?: string
-  stopReason: AgentStopReason
-  text: string
-  toolCalls: AgentToolCall[]
-  usage?: {
-    inputTokens?: number
-    outputTokens?: number
-    reasoningTokens?: number
-    cacheReadTokens?: number
-  }
-  raw: unknown
-}
-
-interface LlmAdapter {
-  complete(request: AgentLlmRequest): Promise<AgentLlmResponse>
-  stream(request: AgentLlmRequest): AsyncIterable<AgentStreamEvent>
-}
-```
-
-| 差异点 | OpenAI | Anthropic | Adapter 内部处理 |
-| --- | --- | --- | --- |
-| 停止原因 | choices[0].finish_reason | 顶层 stop_reason | 映射为 AgentStopReason |
-| 工具参数 | function.arguments 是字符串 | tool_use.input 是对象 | 统一输出 AgentToolCall.input 对象 |
-| 工具结果回填 | role="tool" + tool_call_id | role="user" + tool_result block | 由 formatToolResult(provider, result) 隔离 |
-| 文本位置 | message.content | content[].text block | 统一拼成 response.text |
-| usage 字段 | prompt_tokens / completion_tokens | input_tokens / output_tokens | 统一成 inputTokens / outputTokens |
-| Streaming | data-only SSE + [DONE] | event typed SSE | 统一成 text_delta / tool_input_delta / done |
-
-<a id="loop-state-machine"></a>
-## Agent Loop 状态机
-
-`从字段判断升级为 Runtime 行为`
-
-| 状态 | OpenAI 信号 | Anthropic 信号 | Agent Runtime 行为 |
-| --- | --- | --- | --- |
-| 正常结束 | finish_reason=stop | stop_reason=end_turn | 提取文本，生成最终回答，写入 trace |
-| 需要工具 | tool_calls | tool_use | 校验工具白名单与 schema，执行工具，回填结果，再次请求 LLM |
-| 输出截断 | length | max_tokens | 记录不完整原因；可扩大 token 重试、请求续写或返回部分结果 |
-| 安全拒绝 | content_filter / refusal | refusal | 进入 fallback，给用户可解释提示，记录安全事件 |
-| 长任务暂停 | 无直接等价 | pause_turn | 持久化 PendingRun，等待 HITL 或外部事件后精准 resume |
-
-<a id="error-retry"></a>
-## 错误处理与重试策略
-
-`把 API 错误变成可控的 Runtime 分支`
-
-| 错误类型 | 常见原因 | Agent 行为 | 是否重试 |
-| --- | --- | --- | --- |
-| 400 | role 写错、tool_result 顺序错误、schema 不合法、max_tokens 缺失 | 记录 request snapshot，标记为 developer error，不自动盲重试 | 通常不重试 |
-| 401 / 403 | API key 无效、权限不足、模型不可用 | 熔断当前 provider，提示配置问题，避免循环调用 | 不重试 |
-| 429 | RPM / TPM / 并发限制触发 | 指数退避，按 run_id 记录 retry_count，可切备用模型 | 可重试 |
-| 5xx | Provider 短暂故障 | 短重试 + jitter；超过上限后 fallback 或切 provider | 可重试 |
-| Streaming parse error | 网络中断、JSON delta 未拼完整、[DONE] 前连接断开 | 保留 partial buffer，标记 stream_incomplete，必要时非流式重试 | 谨慎重试 |
-| Tool input invalid | 模型填参不符合 schema 或业务约束 | schema validation error 回填给模型，触发 self-correction | 可在 loop 内修正 |
-
-<a id="trace-cost-context"></a>
-## Trace、成本与上下文管理
-
-`Agent 可观测性不是日志打印，而是结构化证据链`
-
-| Trace 字段 | 来源 | 用途 | 说明 |
-| --- | --- | --- | --- |
-| provider / model | 请求配置 + 响应体 | 模型效果、成本和故障归因 | 响应中的实际 model 可能与请求别名不同 |
-| request_id | OpenAI id / Anthropic id | 和 provider 侧日志对齐 | 写入每次 LLM 调用 trace |
-| stop_reason | finish_reason / stop_reason | 解释 Agent 为什么停、为什么调工具、为什么失败 | 建议使用内部枚举 |
-| tool_calls | 响应中的工具调用 | 复盘工具选择、参数质量和风险动作 | 记录前先做敏感字段脱敏 |
-| latency_ms / retry_count | Runtime 计时与重试器 | 定位慢请求、限流和 provider 抖动 | 按 turn 记录，不只按 run 记录 |
-| input_tokens / output_tokens | usage 字段 | 成本统计和上下文膨胀预警 | OpenAI / Anthropic 字段名不同，Adapter 统一 |
-| reasoning_tokens / thinking_budget | reasoning / thinking 相关 usage 或请求参数 | 分析推理成本和复杂问题开销 | 不要只看 output_tokens |
-| cache_read_tokens | cached_tokens / cache_read_input_tokens | 评估 prompt cache 是否生效 | 适合长 system prompt 或工具说明复用场景 |
-| redaction_applied | Runtime 脱敏模块 | 公开演示和生产安全边界 | 保留“已脱敏”证据，不保留原文敏感值 |
-
-### 上下文管理建议
-
-| 问题 | 风险 | 处理方式 |
-| --- | --- | --- |
-| 历史消息无限追加 | 成本上升、上下文被挤爆、工具结果噪声干扰推理 | 按 turn 保留关键证据，对旧工具结果做摘要 |
-| System prompt 很长 | 每次请求重复计费，延迟增加 | 使用 prompt cache；Trace 中记录 cache 命中 token |
-| Reasoning / thinking 打开过大 | 复杂问题质量提升，但成本不可见地增加 | 按 workflow 设置预算，简单分类不用高 reasoning |
-| 工具返回过大 | LLM 被日志噪声淹没，诊断变慢 | 工具侧先聚合、截断、排序，只回填证据摘要 |
-
-<a id="ex-system"></a>
-## 完整 HTTP 示例：System Prompt
-
-**HTTP Request OpenAI**
-
-```ts
-POST https://api.openai.com/v1/chat/completions
-Authorization: Bearer $OPENAI_API_KEY
-Content-Type: application/json
-
-{
-  "model": "gpt-4o",
-  "messages": [
-    {
-      "role": "system",
-      "content": "你是 SRE 助手。"
-    },
-    {
-      "role": "user",
-      "content": "CPU 飙到 95%"
-    }
-  ]
-}
-```
-
-**HTTP Request Anthropic**
-
-```ts
-POST https://api.anthropic.com/v1/messages
-x-api-key: $ANTHROPIC_API_KEY
-anthropic-version: 2023-06-01
-Content-Type: application/json
-
-{
-  "model": "claude-sonnet-4-5",
-  "max_tokens": 1024,
-  // system 是顶层字段，不在 messages 里
-  "system": "你是 SRE 助手。",
-  "messages": [
-    {
-      "role": "user",
-      "content": "CPU 飙到 95%"
-    }
-  ]
-}
-```
-
-<a id="ex-tools"></a>
-## 完整 HTTP 示例：Tools Schema
-
-**HTTP Request OpenAI**
+**完整 HTTP 请求 OpenAI**
 
 ```ts
 {
   "model": "gpt-4o",
-  "messages": [...],
+  "messages": [
+    { "role": "system", "content": "你是 SRE 助手。" },
+    { "role": "user", "content": "查 api-gateway 近1小时 ERROR 日志" }
+  ],
   "tools": [
     {
+      // OpenAI：外层包一层 type:function
       "type": "function",
       "function": {
         "name": "query_logs",
-        "description": "查询错误日志",
-        // 字段名：parameters
+        "description": "查询服务错误日志。用户想了解服务错误时使用。",
+        // OpenAI 字段名：parameters
         "parameters": {
           "type": "object",
           "properties": {
-            "service": {
-              "type": "string"
-            },
+            "service": { "type": "string" },
+            "duration_minutes": { "type": "integer" },
             "level": {
               "type": "string",
-              "enum": ["ERROR", "WARN"]
+              "enum": ["ERROR", "WARN", "INFO"]
             }
           },
-          "required": ["service"]
+          "required": ["service", "level"],
+          "additionalProperties": false
         }
       }
     }
   ],
-  // tool_choice 可以是字符串
+  // 字符串形式
   "tool_choice": "auto"
 }
 ```
 
-**HTTP Request Anthropic**
-
-```ts
-{
-  "model": "claude-sonnet-4-5",
-  "max_tokens": 1024,
-  "system": "...",
-  "messages": [...],
-  "tools": [
-    {
-      // 没有外层 type:function 包裹
-      "name": "query_logs",
-      "description": "查询错误日志",
-      // 字段名：input_schema（不是 parameters）
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "service": {
-            "type": "string"
-          },
-          "level": {
-            "type": "string",
-            "enum": ["ERROR", "WARN"]
-          }
-        },
-        "required": ["service"]
-      }
-    }
-  ],
-  // tool_choice 始终是对象
-  "tool_choice": { "type": "auto" }
-}
-```
-
-<a id="ex-toolresult"></a>
-## 完整 HTTP 示例：工具结果回填
-
-`差异最大的地方`
-
-> 工具执行完后，必须把完整历史（含 assistant 工具调用那条）+ 工具结果一起发给 LLM。两家格式完全不同，这是最容易写错的地方。
-
-**HTTP Request（含回填） OpenAI**
-
-```ts
-{
-  "model": "gpt-4o",
-  "messages": [
-    {
-      "role": "system",
-      "content": "你是 SRE 助手。"
-    },
-    {
-      "role": "user",
-      "content": "CPU 飙到 95%"
-    },
-    // ① assistant 原始输出（content=null）
-    {
-      "role": "assistant",
-      "content": null,
-      "tool_calls": [{
-        "id": "call_xyz789",
-        "type": "function",
-        "function": {
-          "name": "query_logs",
-          // arguments 是字符串！
-          "arguments": "{\"service\":\"api-gw\"}"
-        }
-      }]
-    },
-    // ② tool result：专属 role="tool"
-    {
-      "role": "tool",
-      "tool_call_id": "call_xyz789",
-      "content": "{\"logs\":[...]}"
-    }
-  ]
-}
-```
-
-**HTTP Request（含回填） Anthropic**
+**完整 HTTP 请求 Anthropic**
 
 ```ts
 {
@@ -510,86 +470,34 @@ Content-Type: application/json
   "max_tokens": 1024,
   "system": "你是 SRE 助手。",
   "messages": [
+    { "role": "user", "content": "查 api-gateway 近1小时 ERROR 日志" }
+  ],
+  "tools": [
     {
-      "role": "user",
-      "content": "CPU 飙到 95%"
-    },
-    // ① assistant：content 是数组，含文字+工具调用
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text",
-          "text": "我查一下日志。" },
-        { "type": "tool_use",
-          "id": "toolu_xyz789",
-          "name": "query_logs",
-          // input 是对象，直接用
-          "input": {
-            "service": "api-gw"
+      // Anthropic：直接平铺，没有外层 type:function
+      "name": "query_logs",
+      "description": "查询服务错误日志。用户想了解服务错误时使用。",
+      // Anthropic 字段名：input_schema（不是 parameters）
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "duration_minutes": { "type": "integer" },
+          "level": {
+            "type": "string",
+            "enum": ["ERROR", "WARN", "INFO"]
           }
-        }
-      ]
-    },
-    // ② tool result：用 role="user"，不是 tool
-    {
-      "role": "user",
-      "content": [{
-        "type": "tool_result",
-        "tool_use_id": "toolu_xyz789",
-        "content": "{\"logs\":[...]}"
-      }]
+        },
+        "required": ["service", "level"]
+      }
     }
-  ]
+  ],
+  // 始终是对象形式
+  "tool_choice": { "type": "auto" }
 }
 ```
 
-<a id="ex-response"></a>
-## 完整 HTTP 示例：Response 解析
-
-`模型返回体`
-
-### 正常结束（文本输出）
-
-**Response Body OpenAI**
-
-```ts
-{
-  "id": "chatcmpl-abc",
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      "content": "建议先限流..."
-    },
-    // Agent Loop 判断字段
-    "finish_reason": "stop"
-  }],
-  "usage": {
-    "prompt_tokens": 120,
-    "completion_tokens": 45
-  }
-}
-```
-
-**Response Body Anthropic**
-
-```ts
-{
-  "id": "msg_abc",
-  // stop_reason 在顶层
-  "stop_reason": "end_turn",
-  "content": [{
-    "type": "text",
-    "text": "建议先限流..."
-  }],
-  "usage": {
-    // 字段名不同
-    "input_tokens": 120,
-    "output_tokens": 45
-  }
-}
-```
-
-### 需要调工具
+### 模型返回（工具调用）对比
 
 **Response Body OpenAI**
 
@@ -601,12 +509,12 @@ Content-Type: application/json
       // content=null 当有工具调用时
       "content": null,
       "tool_calls": [{
-        "id": "call_xyz789",
+        "id": "call_xyz",
         "type": "function",
         "function": {
           "name": "query_logs",
           // arguments 是字符串，需 JSON.parse
-          "arguments": "{\"service\":\"api-gw\"}"
+          "arguments": "{\"service\":\"api-gateway\",\"level\":\"ERROR\"}"
         }
       }]
     },
@@ -628,94 +536,216 @@ Content-Type: application/json
     },
     {
       "type": "tool_use",
-      "id": "toolu_xyz789",
+      "id": "toulu_xyz",
       "name": "query_logs",
       // input 已是对象，直接用
       "input": {
-        "service": "api-gw"
+        "service": "api-gateway",
+        "level": "ERROR"
       }
     }
   ]
 }
 ```
 
-<a id="agent-loop"></a>
-## Agent Loop 核心要点
+### tool_choice 四种策略完整示例
 
-> 一句话： LLM API 只解决"一次无状态推理"，Agent Runtime 负责上下文、工具执行、状态、安全、可观测性。
-
-**TypeScript 伪代码 通用**
+**tool_choice 示例 OpenAI**
 
 ```ts
-messages = [
-  { role: "system", content: systemPrompt },
-  { role: "user",   content: userInput },
-]
+// 模型自己决定（默认）
+"tool_choice": "auto"
 
-for (turn of range(maxTurns)) {
-  traceRequest(messages, tools)
+// 禁止调工具，只输出文字
+"tool_choice": "none"
 
-  response = await callLLM({ model, messages, tools })
+// 必须调工具，模型自选哪个
+"tool_choice": "required"
 
-  traceResponse(response)
-
-  // OpenAI: response.choices[0].finish_reason
-  // Anthropic: response.stop_reason
-  if (isFinalText(response)) {
-    return extractText(response)
-  }
-
-  toolCalls = extractToolCalls(response)
-
-  // 把 assistant 那条存入历史（含 tool_calls / content blocks）
-  messages.push(toAssistantMessage(response))
-
-  for (call of toolCalls) {
-    if (!allowedTools.has(call.name)) {
-      toolResult = { error: "tool_not_allowed" }
-    } else if (guardrailRejects(call)) {
-      toolResult = { error: "guardrail_rejected" }
-    } else if (needsApproval(call)) {
-      savePendingState(messages, call)
-      return { status: "pending_approval" }
-    } else {
-      toolResult = await runTool(call)
-    }
-
-    // OpenAI: role="tool", tool_call_id
-    // Anthropic: role="user", type="tool_result", tool_use_id
-    messages.push(formatToolResult(call, toolResult))
-  }
+// 强制调指定工具
+"tool_choice": {
+  "type": "function",
+  "function": { "name": "query_logs" }
 }
-
-return fallback("max_turns_exceeded")
 ```
 
-### finish_reason / stop_reason 决策树
+**tool_choice 示例 Anthropic**
 
-| 值（OpenAI / Anthropic） | 含义 | Agent 动作 |
+```ts
+// 模型自己决定（始终是对象）
+"tool_choice": { "type": "auto" }
+
+// 禁止调工具
+"tool_choice": { "type": "none" }
+
+// 必须调工具，模型自选哪个（对应 OpenAI required）
+"tool_choice": { "type": "any" }
+
+// 强制调指定工具
+"tool_choice": {
+  "type": "tool",
+  "name": "query_logs"
+}
+```
+
+<a id="structured-output"></a>
+## Structured Output
+
+`让模型的文字输出本身就是合法 JSON`
+
+> 适合 不需要模型执行动作、只需要结构化分析结果 的场景（如 Router 决策、诊断报告、意图分类）。OpenAI 用 response_format ，Anthropic 没有此参数，用"输出工具 + tool_choice 强制"代替。
+
+**完整 HTTP 请求 OpenAI — response_format**
+
+```ts
+{
+  "model": "gpt-4o",
+  "messages": [
+    { "role": "system", "content": "你是 SRE 诊断助手，输出结构化报告。" },
+    { "role": "user", "content": "api-gateway CPU 95%，大量 502" }
+  ],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "diagnosis_report",
+      // strict:true 保证字段不多不少
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["P0","P1","P2","P3"]
+          },
+          "root_cause": { "type": "string" },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action":   { "type": "string" },
+                "priority": { "type": "integer" },
+                "need_approval": { "type": "boolean" }
+              },
+              "required": ["action","priority","need_approval"],
+              "additionalProperties": false
+            }
+          },
+          "confidence": { "type": "number" }
+        },
+        "required": ["severity","root_cause","actions","confidence"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+**完整 HTTP 请求 Anthropic — 输出工具模拟**
+
+```ts
+{
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 1024,
+  "system": "你是 SRE 诊断助手，输出结构化报告。",
+  "messages": [
+    { "role": "user", "content": "api-gateway CPU 95%，大量 502" }
+  ],
+  // 定义一个"输出工具"，实际上是结构化输出的载体
+  "tools": [{
+    "name": "emit_diagnosis",
+    "description": "输出诊断报告。分析完成后必须调用此工具。",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["P0","P1","P2","P3"]
+        },
+        "root_cause": { "type": "string" },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action":       { "type": "string" },
+              "priority":     { "type": "integer" },
+              "need_approval": { "type": "boolean" }
+            },
+            "required": ["action","priority","need_approval"]
+          }
+        },
+        "confidence": { "type": "number" }
+      },
+      "required": ["severity","root_cause","actions","confidence"]
+    }
+  }],
+  // 强制调用，模型填的参数就是结构化结果
+  "tool_choice": { "type": "tool", "name": "emit_diagnosis" }
+}
+```
+
+### 模型返回 & 如何取结果
+
+**Response Body OpenAI**
+
+```ts
+{
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      // content 是 JSON 字符串，需 JSON.parse
+      "content": "{\"severity\":\"P0\",\"root_cause\":\"连接池耗尽\",\"actions\":[{\"action\":\"限流\",\"priority\":1,\"need_approval\":false}],\"confidence\":0.87}"
+    },
+    "finish_reason": "stop"
+  }]
+}
+
+// 取结果
+const report = JSON.parse(
+  response.choices[0].message.content
+)
+```
+
+**Response Body Anthropic**
+
+```ts
+{
+  "stop_reason": "tool_use",
+  "content": [{
+    "type": "tool_use",
+    "name": "emit_diagnosis",
+    // input 已是对象，直接用，无需 JSON.parse
+    "input": {
+      "severity": "P0",
+      "root_cause": "连接池耗尽",
+      "actions": [{
+        "action": "限流",
+        "priority": 1,
+        "need_approval": false
+      }],
+      "confidence": 0.87
+    }
+  }]
+}
+
+// 取结果
+const toolBlock = response.content.find(b => b.type === "tool_use")
+const report    = toolBlock.input  // 直接用
+```
+
+<a id="schema-vs-structured"></a>
+## Tool Schema vs Structured Output 如何选择
+
+| 维度 | Tool Schema | Structured Output |
 | --- | --- | --- |
-| stop / end_turn | 正常结束 | 提取文本，返回给用户 |
-| tool_calls / tool_use | 需要工具 | 执行工具 → 回填 → 再次请求 LLM |
-| length / max_tokens | 输出截断 | 可续写，或提示用户结果不完整 |
-| content_filter / refusal | 安全拒绝 | 给用户友好提示，记录 Trace |
-| stop_sequence | 命中停止符 | 按业务逻辑处理 |
-| pause_turn （Anthropic only） | 长任务中断 | 保存状态，HITL 审批后恢复 |
+| 模型行为 | 决定是否调用、填参数 | 直接输出结构化文字 |
+| 是否真正执行动作 | 是（查日志、重启服务） | 否（只需要分析结果） |
+| 后续还需要 LLM | 是（工具结果回填，继续推理） | 否（拿到结果直接用） |
+| 典型场景 | query_logs、restart_service、call_api | Router 决策、诊断报告、意图分类 |
+| Anthropic 实现方式 | tools + tool_choice: auto | 输出工具 + tool_choice: {type:"tool",name:"..."} |
 
-<a id="gotchas"></a>
-## 常见踩坑
-
-| 场景 | OpenAI 注意 | Anthropic 注意 |
-| --- | --- | --- |
-| 多轮历史维护 | tool_calls 的 assistant message 要完整保存（包括 content=null 那条） | assistant 的 content 是数组，要整个 block 数组存，不能只存 text |
-| 工具参数解析 | arguments 是 字符串 ，必须 JSON.parse，streaming 时需拼接完整再 parse | input 是对象直接用，但 streaming 的 input_json_delta 需拼接后再 parse |
-| System prompt | 新模型推荐 role="developer"，兼容服务通常只认 "system" | messages 里写 role="system" 直接报错 |
-| 结构化输出 | response_format.type="json_schema" 可精确约束 | 没有 response_format，用 tool_choice 强制调特定工具 来实现 |
-| max_tokens | 可以不填（有默认值） | 必须填， 忘填直接报错 |
-| 工具调用 ID | 回填用 tool_call_id ，对应 tool_calls[].id（call_ 前缀） | 回填用 tool_use_id ，对应 content[].id（toulu_ 前缀） |
-| 请求头 | Authorization: Bearer $OPENAI_API_KEY | x-api-key + anthropic-version 必须带 ，缺少报 400 |
-| temperature 上限 | 最高 2.0 | 最高 1.0 ，超过报错 |
-| usage 字段名 | prompt_tokens / completion_tokens | input_tokens / output_tokens （不同） |
+> 在 SRE Agent 里的典型分工： Router 阶段判断 workflow 类型 → Structured Output（只要决策，不执行动作）。工具执行阶段调 query_logs / check_metrics → Tool Schema（真正执行，结果回填继续推理）。最终生成诊断报告 → Structured Output（把所有结论整理成结构化格式）。
 
 <a id="sse-protocol"></a>
 ## SSE 协议格式
@@ -1080,52 +1110,170 @@ if (finishReason === "tool_calls") {
 }
 ```
 
-<a id="tool-schema"></a>
-## Tool Schema 用法
+<a id="ex-system"></a>
+## 完整 HTTP 示例：System Prompt
 
-`告诉模型可以调用哪些工具、参数约束是什么`
+**HTTP Request OpenAI**
 
-> Tool Schema 本质是 JSON Schema，放在 tools 数组里。 description 字段 决定模型什么时候调用这个工具，写得越清晰，模型选工具越准确。
+```ts
+POST https://api.openai.com/v1/chat/completions
+Authorization: Bearer $OPENAI_API_KEY
+Content-Type: application/json
 
-**完整 HTTP 请求 OpenAI**
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "system",
+      "content": "你是 SRE 助手。"
+    },
+    {
+      "role": "user",
+      "content": "CPU 飙到 95%"
+    }
+  ]
+}
+```
+
+**HTTP Request Anthropic**
+
+```ts
+POST https://api.anthropic.com/v1/messages
+x-api-key: $ANTHROPIC_API_KEY
+anthropic-version: 2023-06-01
+Content-Type: application/json
+
+{
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 1024,
+  // system 是顶层字段，不在 messages 里
+  "system": "你是 SRE 助手。",
+  "messages": [
+    {
+      "role": "user",
+      "content": "CPU 飙到 95%"
+    }
+  ]
+}
+```
+
+<a id="ex-tools"></a>
+## 完整 HTTP 示例：Tools Schema
+
+**HTTP Request OpenAI**
+
+```ts
+{
+  "model": "gpt-4o",
+  "messages": [...],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "query_logs",
+        "description": "查询错误日志",
+        // 字段名：parameters
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "service": {
+              "type": "string"
+            },
+            "level": {
+              "type": "string",
+              "enum": ["ERROR", "WARN"]
+            }
+          },
+          "required": ["service"]
+        }
+      }
+    }
+  ],
+  // tool_choice 可以是字符串
+  "tool_choice": "auto"
+}
+```
+
+**HTTP Request Anthropic**
+
+```ts
+{
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 1024,
+  "system": "...",
+  "messages": [...],
+  "tools": [
+    {
+      // 没有外层 type:function 包裹
+      "name": "query_logs",
+      "description": "查询错误日志",
+      // 字段名：input_schema（不是 parameters）
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": ["ERROR", "WARN"]
+          }
+        },
+        "required": ["service"]
+      }
+    }
+  ],
+  // tool_choice 始终是对象
+  "tool_choice": { "type": "auto" }
+}
+```
+
+<a id="ex-toolresult"></a>
+## 完整 HTTP 示例：工具结果回填
+
+`差异最大的地方`
+
+> 工具执行完后，必须把完整历史（含 assistant 工具调用那条）+ 工具结果一起发给 LLM。两家格式完全不同，这是最容易写错的地方。
+
+**HTTP Request（含回填） OpenAI**
 
 ```ts
 {
   "model": "gpt-4o",
   "messages": [
-    { "role": "system", "content": "你是 SRE 助手。" },
-    { "role": "user", "content": "查 api-gateway 近1小时 ERROR 日志" }
-  ],
-  "tools": [
     {
-      // OpenAI：外层包一层 type:function
-      "type": "function",
-      "function": {
-        "name": "query_logs",
-        "description": "查询服务错误日志。用户想了解服务错误时使用。",
-        // OpenAI 字段名：parameters
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "service": { "type": "string" },
-            "duration_minutes": { "type": "integer" },
-            "level": {
-              "type": "string",
-              "enum": ["ERROR", "WARN", "INFO"]
-            }
-          },
-          "required": ["service", "level"],
-          "additionalProperties": false
+      "role": "system",
+      "content": "你是 SRE 助手。"
+    },
+    {
+      "role": "user",
+      "content": "CPU 飙到 95%"
+    },
+    // ① assistant 原始输出（content=null）
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_xyz789",
+        "type": "function",
+        "function": {
+          "name": "query_logs",
+          // arguments 是字符串！
+          "arguments": "{\"service\":\"api-gw\"}"
         }
-      }
+      }]
+    },
+    // ② tool result：专属 role="tool"
+    {
+      "role": "tool",
+      "tool_call_id": "call_xyz789",
+      "content": "{\"logs\":[...]}"
     }
-  ],
-  // 字符串形式
-  "tool_choice": "auto"
+  ]
 }
 ```
 
-**完整 HTTP 请求 Anthropic**
+**HTTP Request（含回填） Anthropic**
 
 ```ts
 {
@@ -1133,34 +1281,86 @@ if (finishReason === "tool_calls") {
   "max_tokens": 1024,
   "system": "你是 SRE 助手。",
   "messages": [
-    { "role": "user", "content": "查 api-gateway 近1小时 ERROR 日志" }
-  ],
-  "tools": [
     {
-      // Anthropic：直接平铺，没有外层 type:function
-      "name": "query_logs",
-      "description": "查询服务错误日志。用户想了解服务错误时使用。",
-      // Anthropic 字段名：input_schema（不是 parameters）
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "service": { "type": "string" },
-          "duration_minutes": { "type": "integer" },
-          "level": {
-            "type": "string",
-            "enum": ["ERROR", "WARN", "INFO"]
+      "role": "user",
+      "content": "CPU 飙到 95%"
+    },
+    // ① assistant：content 是数组，含文字+工具调用
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text",
+          "text": "我查一下日志。" },
+        { "type": "tool_use",
+          "id": "toolu_xyz789",
+          "name": "query_logs",
+          // input 是对象，直接用
+          "input": {
+            "service": "api-gw"
           }
-        },
-        "required": ["service", "level"]
-      }
+        }
+      ]
+    },
+    // ② tool result：用 role="user"，不是 tool
+    {
+      "role": "user",
+      "content": [{
+        "type": "tool_result",
+        "tool_use_id": "toolu_xyz789",
+        "content": "{\"logs\":[...]}"
+      }]
     }
-  ],
-  // 始终是对象形式
-  "tool_choice": { "type": "auto" }
+  ]
 }
 ```
 
-### 模型返回（工具调用）对比
+<a id="ex-response"></a>
+## 完整 HTTP 示例：Response 解析
+
+`模型返回体`
+
+### 正常结束（文本输出）
+
+**Response Body OpenAI**
+
+```ts
+{
+  "id": "chatcmpl-abc",
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": "建议先限流..."
+    },
+    // Agent Loop 判断字段
+    "finish_reason": "stop"
+  }],
+  "usage": {
+    "prompt_tokens": 120,
+    "completion_tokens": 45
+  }
+}
+```
+
+**Response Body Anthropic**
+
+```ts
+{
+  "id": "msg_abc",
+  // stop_reason 在顶层
+  "stop_reason": "end_turn",
+  "content": [{
+    "type": "text",
+    "text": "建议先限流..."
+  }],
+  "usage": {
+    // 字段名不同
+    "input_tokens": 120,
+    "output_tokens": 45
+  }
+}
+```
+
+### 需要调工具
 
 **Response Body OpenAI**
 
@@ -1172,12 +1372,12 @@ if (finishReason === "tool_calls") {
       // content=null 当有工具调用时
       "content": null,
       "tool_calls": [{
-        "id": "call_xyz",
+        "id": "call_xyz789",
         "type": "function",
         "function": {
           "name": "query_logs",
           // arguments 是字符串，需 JSON.parse
-          "arguments": "{\"service\":\"api-gateway\",\"level\":\"ERROR\"}"
+          "arguments": "{\"service\":\"api-gw\"}"
         }
       }]
     },
@@ -1199,216 +1399,16 @@ if (finishReason === "tool_calls") {
     },
     {
       "type": "tool_use",
-      "id": "toulu_xyz",
+      "id": "toolu_xyz789",
       "name": "query_logs",
       // input 已是对象，直接用
       "input": {
-        "service": "api-gateway",
-        "level": "ERROR"
+        "service": "api-gw"
       }
     }
   ]
 }
 ```
-
-### tool_choice 四种策略完整示例
-
-**tool_choice 示例 OpenAI**
-
-```ts
-// 模型自己决定（默认）
-"tool_choice": "auto"
-
-// 禁止调工具，只输出文字
-"tool_choice": "none"
-
-// 必须调工具，模型自选哪个
-"tool_choice": "required"
-
-// 强制调指定工具
-"tool_choice": {
-  "type": "function",
-  "function": { "name": "query_logs" }
-}
-```
-
-**tool_choice 示例 Anthropic**
-
-```ts
-// 模型自己决定（始终是对象）
-"tool_choice": { "type": "auto" }
-
-// 禁止调工具
-"tool_choice": { "type": "none" }
-
-// 必须调工具，模型自选哪个（对应 OpenAI required）
-"tool_choice": { "type": "any" }
-
-// 强制调指定工具
-"tool_choice": {
-  "type": "tool",
-  "name": "query_logs"
-}
-```
-
-<a id="structured-output"></a>
-## Structured Output
-
-`让模型的文字输出本身就是合法 JSON`
-
-> 适合 不需要模型执行动作、只需要结构化分析结果 的场景（如 Router 决策、诊断报告、意图分类）。OpenAI 用 response_format ，Anthropic 没有此参数，用"输出工具 + tool_choice 强制"代替。
-
-**完整 HTTP 请求 OpenAI — response_format**
-
-```ts
-{
-  "model": "gpt-4o",
-  "messages": [
-    { "role": "system", "content": "你是 SRE 诊断助手，输出结构化报告。" },
-    { "role": "user", "content": "api-gateway CPU 95%，大量 502" }
-  ],
-  "response_format": {
-    "type": "json_schema",
-    "json_schema": {
-      "name": "diagnosis_report",
-      // strict:true 保证字段不多不少
-      "strict": true,
-      "schema": {
-        "type": "object",
-        "properties": {
-          "severity": {
-            "type": "string",
-            "enum": ["P0","P1","P2","P3"]
-          },
-          "root_cause": { "type": "string" },
-          "actions": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "action":   { "type": "string" },
-                "priority": { "type": "integer" },
-                "need_approval": { "type": "boolean" }
-              },
-              "required": ["action","priority","need_approval"],
-              "additionalProperties": false
-            }
-          },
-          "confidence": { "type": "number" }
-        },
-        "required": ["severity","root_cause","actions","confidence"],
-        "additionalProperties": false
-      }
-    }
-  }
-}
-```
-
-**完整 HTTP 请求 Anthropic — 输出工具模拟**
-
-```ts
-{
-  "model": "claude-sonnet-4-5",
-  "max_tokens": 1024,
-  "system": "你是 SRE 诊断助手，输出结构化报告。",
-  "messages": [
-    { "role": "user", "content": "api-gateway CPU 95%，大量 502" }
-  ],
-  // 定义一个"输出工具"，实际上是结构化输出的载体
-  "tools": [{
-    "name": "emit_diagnosis",
-    "description": "输出诊断报告。分析完成后必须调用此工具。",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "severity": {
-          "type": "string",
-          "enum": ["P0","P1","P2","P3"]
-        },
-        "root_cause": { "type": "string" },
-        "actions": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "action":       { "type": "string" },
-              "priority":     { "type": "integer" },
-              "need_approval": { "type": "boolean" }
-            },
-            "required": ["action","priority","need_approval"]
-          }
-        },
-        "confidence": { "type": "number" }
-      },
-      "required": ["severity","root_cause","actions","confidence"]
-    }
-  }],
-  // 强制调用，模型填的参数就是结构化结果
-  "tool_choice": { "type": "tool", "name": "emit_diagnosis" }
-}
-```
-
-### 模型返回 & 如何取结果
-
-**Response Body OpenAI**
-
-```ts
-{
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      // content 是 JSON 字符串，需 JSON.parse
-      "content": "{\"severity\":\"P0\",\"root_cause\":\"连接池耗尽\",\"actions\":[{\"action\":\"限流\",\"priority\":1,\"need_approval\":false}],\"confidence\":0.87}"
-    },
-    "finish_reason": "stop"
-  }]
-}
-
-// 取结果
-const report = JSON.parse(
-  response.choices[0].message.content
-)
-```
-
-**Response Body Anthropic**
-
-```ts
-{
-  "stop_reason": "tool_use",
-  "content": [{
-    "type": "tool_use",
-    "name": "emit_diagnosis",
-    // input 已是对象，直接用，无需 JSON.parse
-    "input": {
-      "severity": "P0",
-      "root_cause": "连接池耗尽",
-      "actions": [{
-        "action": "限流",
-        "priority": 1,
-        "need_approval": false
-      }],
-      "confidence": 0.87
-    }
-  }]
-}
-
-// 取结果
-const toolBlock = response.content.find(b => b.type === "tool_use")
-const report    = toolBlock.input  // 直接用
-```
-
-<a id="schema-vs-structured"></a>
-## Tool Schema vs Structured Output 如何选择
-
-| 维度 | Tool Schema | Structured Output |
-| --- | --- | --- |
-| 模型行为 | 决定是否调用、填参数 | 直接输出结构化文字 |
-| 是否真正执行动作 | 是（查日志、重启服务） | 否（只需要分析结果） |
-| 后续还需要 LLM | 是（工具结果回填，继续推理） | 否（拿到结果直接用） |
-| 典型场景 | query_logs、restart_service、call_api | Router 决策、诊断报告、意图分类 |
-| Anthropic 实现方式 | tools + tool_choice: auto | 输出工具 + tool_choice: {type:"tool",name:"..."} |
-
-> 在 SRE Agent 里的典型分工： Router 阶段判断 workflow 类型 → Structured Output（只要决策，不执行动作）。工具执行阶段调 query_logs / check_metrics → Tool Schema（真正执行，结果回填继续推理）。最终生成诊断报告 → Structured Output（把所有结论整理成结构化格式）。
 
 ## 资料来源
 

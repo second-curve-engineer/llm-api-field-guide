@@ -28,6 +28,10 @@ This repository is published as a static site through GitHub Pages:
 https://second-curve-engineer.github.io/llm-api-field-guide/
 ```
 
+You can also read the Markdown version directly on GitHub:
+
+- [LLM API Field Guide Markdown Version](GUIDE.md)
+
 ## Why This Guide Exists
 
 When building a real Agent Runtime, LLM API differences are not just parameter-name differences. They affect:
@@ -54,4 +58,3 @@ Always verify production behavior against the official provider documentation.
 ## Disclaimer
 
 This is an independent engineering note by `second-curve-engineer`. It is not affiliated with OpenAI or Anthropic.
-

@@ -28,6 +28,10 @@
 https://second-curve-engineer.github.io/llm-api-field-guide/
 ```
 
+也可以直接在 GitHub 阅读 Markdown 版本：
+
+- [LLM API 对照手册 Markdown 版](GUIDE.md)
+
 ## 为什么整理这份手册
 
 在实际构建 Agent Runtime 时，LLM API 的差异不会只停留在“参数名不同”这一层。它会影响：
@@ -54,4 +58,3 @@ https://second-curve-engineer.github.io/llm-api-field-guide/
 ## 免责声明
 
 这是 `second-curve-engineer` 的独立工程笔记，不隶属于 OpenAI 或 Anthropic，也不代表官方文档。
-

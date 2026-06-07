@@ -33,9 +33,9 @@ This repository is published as a static site through GitHub Pages:
 https://second-curve-engineer.github.io/llm-api-field-guide/
 ```
 
-You can also read the Markdown version directly on GitHub:
+The full Chinese Markdown guide is now merged into the default repository README:
 
-- [LLM API Field Guide Markdown Version](GUIDE.md)
+- [Agent 工程师的 LLM API 对照手册](README.md)
 
 ## Why This Guide Exists
 

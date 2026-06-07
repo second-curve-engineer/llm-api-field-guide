@@ -6,10 +6,18 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Agent 工程师的 LLM API 对照手册</title>
 <link href="favicon.svg" rel="icon" type="image/svg+xml"/>
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem('llm-api-field-guide-theme') || 'dark';
+  } catch (_) {
+    document.documentElement.dataset.theme = 'dark';
+  }
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap');
 
   :root {
+    color-scheme: dark;
     --bg: #0f0f11;
     --bg2: #161619;
     --bg3: #1e1e23;
@@ -31,9 +39,50 @@
     --blue-dim: #1a2a3a;
     --green: #5abf7a;
     --green-dim: #1a2e20;
+    --row-key-bg: rgba(124,111,247,0.04);
+    --row-diff-bg: rgba(240,165,0,0.04);
+    --callout-warn-border: rgba(240,165,0,0.2);
+    --callout-info-border: rgba(90,156,240,0.2);
+    --callout-key-border: rgba(124,111,247,0.2);
+    --decision-hl-bg: rgba(124,111,247,0.06);
+    --syntax-key: #9b8cf5;
+    --syntax-str: #7ec8a0;
     --mono: 'IBM Plex Mono', monospace;
     --serif: 'Noto Serif SC', serif;
     --sans: 'Inter', system-ui, sans-serif;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+    --bg: #f7f8fb;
+    --bg2: #ffffff;
+    --bg3: #eef1f7;
+    --bg4: #e7ebf3;
+    --border: #d7dce8;
+    --border2: #c5ccda;
+    --text: #171923;
+    --text2: #3f4656;
+    --text3: #6b7280;
+    --purple: #4f46e5;
+    --purple-dim: #ebe9ff;
+    --teal: #047857;
+    --teal-dim: #ddf7ee;
+    --amber: #9a5b00;
+    --amber-dim: #fff3d6;
+    --red: #b42318;
+    --red-dim: #ffe4e0;
+    --blue: #1d4ed8;
+    --blue-dim: #e3edff;
+    --green: #047857;
+    --green-dim: #dcfce7;
+    --row-key-bg: rgba(79,70,229,0.055);
+    --row-diff-bg: rgba(154,91,0,0.06);
+    --callout-warn-border: rgba(154,91,0,0.26);
+    --callout-info-border: rgba(29,78,216,0.22);
+    --callout-key-border: rgba(79,70,229,0.24);
+    --decision-hl-bg: rgba(79,70,229,0.075);
+    --syntax-key: #5b21b6;
+    --syntax-str: #047857;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -78,6 +127,25 @@
     font-size: 12px;
     color: var(--text3);
     margin-top: 3px;
+  }
+  .theme-toggle {
+    width: 100%;
+    margin-top: 1rem;
+    padding: 6px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text2);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    text-align: left;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .theme-toggle:hover {
+    background: var(--bg4);
+    color: var(--text);
+    border-color: var(--purple);
   }
 
   nav ul { list-style: none; padding: 0 0.75rem; }
@@ -227,8 +295,8 @@
   td.note { color: var(--text2); }
 
   /* row highlights */
-  tr.key-row td { background: rgba(124,111,247,0.04); }
-  tr.diff-row td { background: rgba(240,165,0,0.04); }
+  tr.key-row td { background: var(--row-key-bg); }
+  tr.diff-row td { background: var(--row-diff-bg); }
 
   /* ── Inline tags ── */
   .tag {
@@ -294,14 +362,14 @@
     line-height: 1.65;
     color: var(--text2);
   }
-  .hl-key { color: #9b8cf5; }
-  .hl-str { color: #7ec8a0; }
+  .hl-key { color: var(--syntax-key); }
+  .hl-str { color: var(--syntax-str); }
   .hl-num { color: var(--amber); }
   .hl-bool { color: var(--blue); }
   .hl-null { color: var(--text3); }
   .hl-comment { color: var(--text3); font-style: italic; }
   .hl-method { color: var(--teal); }
-  .hl-url { color: #7ec8a0; }
+  .hl-url { color: var(--syntax-str); }
 
   /* ── Callout ── */
   .callout {
@@ -312,9 +380,9 @@
     margin: 1rem 0;
     font-size: 13px;
   }
-  .callout-warn { background: var(--amber-dim); border: 1px solid rgba(240,165,0,0.2); }
-  .callout-info { background: var(--blue-dim); border: 1px solid rgba(90,156,240,0.2); }
-  .callout-key { background: var(--purple-dim); border: 1px solid rgba(124,111,247,0.2); }
+  .callout-warn { background: var(--amber-dim); border: 1px solid var(--callout-warn-border); }
+  .callout-info { background: var(--blue-dim); border: 1px solid var(--callout-info-border); }
+  .callout-key { background: var(--purple-dim); border: 1px solid var(--callout-key-border); }
   .callout-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
   .callout-body { color: var(--text2); line-height: 1.6; }
   .callout-body strong { color: var(--text); font-weight: 500; }
@@ -398,7 +466,7 @@
     font-size: 12.5px;
   }
   .dg-header { background: var(--bg3); font-family: var(--mono); font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; }
-  .dg-cell.hl { background: rgba(124,111,247,0.06); }
+  .dg-cell.hl { background: var(--decision-hl-bg); }
   .dg-openai { color: var(--green); }
   .dg-anthropic { color: var(--purple); }
 
@@ -415,6 +483,7 @@
 <div class="logo">
 <div class="title">LLM API</div>
 <div class="sub">工程对照手册</div>
+<button aria-label="切换到日间模式" class="theme-toggle" id="theme-toggle" type="button">日间模式</button>
 </div>
 <ul>
 <li class="section-label">速览</li>
@@ -2578,6 +2647,24 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}</pre>
 </main>
 </div>
 <script>
+const root = document.documentElement;
+const themeToggle = document.getElementById('theme-toggle');
+const savedTheme = root.dataset.theme || 'dark';
+
+function applyTheme(theme) {
+  root.dataset.theme = theme;
+  const isLight = theme === 'light';
+  themeToggle.textContent = isLight ? '夜间模式' : '日间模式';
+  themeToggle.setAttribute('aria-label', isLight ? '切换到夜间模式' : '切换到日间模式');
+}
+
+applyTheme(savedTheme);
+themeToggle.addEventListener('click', () => {
+  const nextTheme = root.dataset.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('llm-api-field-guide-theme', nextTheme);
+  applyTheme(nextTheme);
+});
+
 const links = document.querySelectorAll('nav ul li a');
 const sections = document.querySelectorAll('.section');
 const observer = new IntersectionObserver(entries => {
